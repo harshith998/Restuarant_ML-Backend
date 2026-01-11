@@ -1,0 +1,14 @@
+{
+  "host": {
+    "id": "H1",
+    "name": "Jennifer"
+  },
+  "request": {
+    "group_id": "GRP_20260111_002",
+    "party_size": 3,
+    "is_reserved": true,
+    "table_preference": "window",
+    "requested_time": "2026-01-11T18:35:00Z"
+  },
+  "floor_map_version": "v1"
+}
