@@ -205,7 +205,7 @@ async def delete_entry(
             detail=f"Cannot delete - status is {entry.status}"
         )
 
-    await session.delete(entry)
+    session.delete(entry)
     await session.commit()
 
     return {"status": "deleted", "id": str(entry_id)}
