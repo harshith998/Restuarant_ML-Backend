@@ -4,11 +4,11 @@
     "name": "Jennifer"
   },
   "request": {
-    "group_id": "GRP_20260111_002",
-    "party_size": 3,
-    "is_reserved": true,
-    "table_preference": "window",
-    "requested_time": "2026-01-11T18:35:00Z"
+    "group_id": "GRP_20260111_001",
+    "party_size": 4,
+    "is_reserved": false,
+    "table_preference": "booth",
+    "requested_time": "2026-01-11T18:30:00Z"
   },
   "floor_map_version": "v1"
 }
