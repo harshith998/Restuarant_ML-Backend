@@ -19,6 +19,7 @@ python-multipart>=0.0.6
 Pillow>=10.0.0
 torch>=2.0.0
 torchvision>=0.15.0
+transformers>=4.36.0
 
 # Testing
 pytest>=7.4.0
