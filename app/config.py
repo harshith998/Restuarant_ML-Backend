@@ -16,8 +16,17 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # Database
+    # Database (Railway provides postgresql://, we need postgresql+asyncpg://)
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/restaurant_intel"
+
+    @property
+    def async_database_url(self) -> str:
+        """Get database URL with asyncpg driver."""
+        url = self.database_url
+        # Railway provides postgresql://, convert to postgresql+asyncpg://
+        if url.startswith("postgresql://") and "+asyncpg" not in url:
+            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return url
 
     # Application
     app_env: str = "development"
