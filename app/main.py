@@ -1,8 +1,3 @@
-"""
-Restaurant Intelligence Platform - FastAPI Application
-
-Main entry point for the API server.
-"""
 from __future__ import annotations
 
 import logging
@@ -35,6 +30,9 @@ from app.models import (  # noqa: F401
     CameraSource,
     CameraCropState,
     CropDispatchLog,
+    Ingredient,
+    Recipe,
+    KitchenStation,
 )
 
 # ML services (optional - only load if ML is enabled)
@@ -134,6 +132,9 @@ from app.api import (
     visits_router,
     routing_router,
 )
+from app.api.menu_analytics import router as menu_analytics_router
+from app.api.inventory import router as inventory_router
+from app.api.kitchen_routing import router as kitchen_routing_router
 
 app.include_router(restaurants_router)
 app.include_router(tables_router)
@@ -142,3 +143,7 @@ app.include_router(shifts_router)
 app.include_router(waitlist_router)
 app.include_router(visits_router)
 app.include_router(routing_router)
+app.include_router(menu_analytics_router)
+app.include_router(inventory_router)
+app.include_router(kitchen_routing_router)
+
