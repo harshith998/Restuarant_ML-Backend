@@ -3,6 +3,7 @@ REST API endpoints for waiter management.
 """
 from __future__ import annotations
 
+from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
@@ -11,20 +12,53 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
+from app.models.restaurant import Restaurant
 from app.models.waiter import Waiter
-from app.schemas.waiter import WaiterCreate, WaiterRead, WaiterUpdate, WaiterWithShiftStats
+from app.schemas.waiter import WaiterCreate, WaiterRead, WaiterUpdate, WaiterWithShiftStats, WaiterStats, WaiterWithStats
+from app.services.seed_service import SeedService
 from app.services.waiter_service import WaiterService
 
 router = APIRouter(prefix="/api/v1", tags=["waiters"])
 
 
-@router.get("/restaurants/{restaurant_id}/waiters", response_model=List[WaiterRead])
+async def _get_default_restaurant(session: AsyncSession) -> Restaurant:
+    """Return the default restaurant, seeding data if needed."""
+    result = await session.execute(select(Restaurant).order_by(Restaurant.id).limit(1))
+    restaurant = result.scalar_one_or_none()
+
+    if restaurant is None:
+        seed_service = SeedService(session)
+        await seed_service.ensure_default_data()
+        result = await session.execute(select(Restaurant).order_by(Restaurant.id).limit(1))
+        restaurant = result.scalar_one_or_none()
+
+    if restaurant is None:
+        raise HTTPException(status_code=404, detail="Default restaurant not found")
+
+    return restaurant
+
+
+@router.get("/restaurants/default/waiters", response_model=List[WaiterWithStats])
+async def list_default_waiters(
+    include_inactive: bool = Query(False, description="Include inactive waiters"),
+    session: AsyncSession = Depends(get_session),
+) -> List[WaiterWithStats]:
+    """Get all waiters for the default restaurant with stats."""
+    restaurant = await _get_default_restaurant(session)
+    return await list_waiters(
+        restaurant_id=restaurant.id,
+        include_inactive=include_inactive,
+        session=session,
+    )
+
+
+@router.get("/restaurants/{restaurant_id}/waiters", response_model=List[WaiterWithStats])
 async def list_waiters(
     restaurant_id: UUID,
     include_inactive: bool = Query(False, description="Include inactive waiters"),
     session: AsyncSession = Depends(get_session),
-) -> List[WaiterRead]:
-    """Get all waiters for a restaurant."""
+) -> List[WaiterWithStats]:
+    """Get all waiters for a restaurant with stats."""
     query = select(Waiter).where(Waiter.restaurant_id == restaurant_id)
 
     if not include_inactive:
@@ -35,7 +69,46 @@ async def list_waiters(
     result = await session.execute(query)
     waiters = result.scalars().all()
 
-    return [WaiterRead.model_validate(w) for w in waiters]
+    response = []
+    now = datetime.utcnow()
+    for w in waiters:
+        covers = w.total_covers or 0
+        tips = float(w.total_tips or 0)
+        tables_served = w.total_tables_served or 0
+        total_sales = float(w.total_sales or 0)
+
+        stats = WaiterStats(
+            covers=covers,
+            tips=tips,
+            avg_per_cover=total_sales / covers if covers > 0 else 0.0,
+            efficiency_pct=min(100.0, (covers / tables_served) * 10) if tables_served > 0 else 0.0,
+            tables_served=tables_served,
+            total_sales=total_sales,
+        )
+
+        # Calculate tenure_years from created_at
+        tenure_years = (now - w.created_at).days / 365.25 if w.created_at else 0.0
+
+        waiter_dict = WaiterRead.model_validate(w).model_dump()
+        waiter_dict["stats"] = stats
+        waiter_dict["tenure_years"] = round(tenure_years, 2)
+        response.append(WaiterWithStats(**waiter_dict))
+
+    return response
+
+
+@router.get("/restaurants/default/waiters/active")
+async def get_default_active_waiters(
+    section_id: Optional[UUID] = Query(None, description="Filter by section"),
+    session: AsyncSession = Depends(get_session),
+) -> List[dict]:
+    """Get active waiters for the default restaurant."""
+    restaurant = await _get_default_restaurant(session)
+    return await get_active_waiters(
+        restaurant_id=restaurant.id,
+        section_id=section_id,
+        session=session,
+    )
 
 
 @router.get("/restaurants/{restaurant_id}/waiters/active")
@@ -103,6 +176,7 @@ async def create_waiter(
         name=data.name,
         email=data.email,
         phone=data.phone,
+        role=data.role,
     )
     session.add(waiter)
     await session.commit()
@@ -135,6 +209,20 @@ async def update_waiter(
     await session.refresh(waiter)
 
     return WaiterRead.model_validate(waiter)
+
+
+@router.get("/restaurants/default/waiters/leaderboard")
+async def get_default_leaderboard(
+    limit: int = Query(10, le=50),
+    session: AsyncSession = Depends(get_session),
+) -> List[dict]:
+    """Get waiter leaderboard for the default restaurant."""
+    restaurant = await _get_default_restaurant(session)
+    return await get_leaderboard(
+        restaurant_id=restaurant.id,
+        limit=limit,
+        session=session,
+    )
 
 
 @router.get("/restaurants/{restaurant_id}/waiters/leaderboard")

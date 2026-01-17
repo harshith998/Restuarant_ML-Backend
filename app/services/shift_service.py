@@ -153,10 +153,19 @@ class ShiftService:
         if shift is None:
             raise ValueError(f"Shift {shift_id} not found")
 
+        # Update shift aggregates
         shift.tables_served += tables_served_delta
         shift.total_covers += covers_delta
         shift.total_tips = float(shift.total_tips) + tips_delta
         shift.total_sales = float(shift.total_sales) + sales_delta
+
+        # Update waiter's lifetime stats
+        waiter = await self._get_waiter(shift.waiter_id)
+        if waiter is not None:
+            waiter.total_covers += covers_delta
+            waiter.total_tips = float(waiter.total_tips) + tips_delta
+            waiter.total_tables_served += tables_served_delta
+            waiter.total_sales = float(waiter.total_sales) + sales_delta
 
         await self.session.commit()
         await self.session.refresh(shift)

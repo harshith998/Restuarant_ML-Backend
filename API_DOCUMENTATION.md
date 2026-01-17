@@ -554,6 +554,63 @@ Get waiters currently on shift with real-time stats.
 
 ---
 
+### `GET /api/v1/waiters/{waiter_id}/stats`
+Get aggregated stats for a waiter for a period.
+
+**Query Parameters**:
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| period | string | month | month, week, or day |
+
+**Response**:
+```json
+{
+  "covers": 120,
+  "tips": 480.5,
+  "avg_per_cover": 38.5,
+  "efficiency_pct": 92.3,
+  "tables_served": 45,
+  "total_sales": 4620.0
+}
+```
+
+---
+
+### `GET /api/v1/waiters/{waiter_id}/dashboard`
+Get complete dashboard data for a waiter (profile, stats, trends, insights).
+
+**Response (shape)**:
+```json
+{
+  "profile": {
+    "id": "uuid",
+    "name": "Alice Johnson",
+    "email": "alice@example.com",
+    "phone": null,
+    "tier": "strong",
+    "tenure_years": 1.4,
+    "total_shifts": 120,
+    "total_covers": 1800,
+    "total_tips": 14200.0,
+    "is_active": true,
+    "created_at": "2026-01-01T12:00:00Z"
+  },
+  "stats": {
+    "covers": 120,
+    "tips": 480.5,
+    "avg_per_cover": 38.5,
+    "efficiency_pct": 92.3,
+    "tables_served": 45,
+    "total_sales": 4620.0
+  },
+  "trends": [],
+  "insights": null,
+  "recent_shifts": []
+}
+```
+
+---
+
 ### `GET /api/v1/waiters/{waiter_id}`
 Get a single waiter by ID.
 

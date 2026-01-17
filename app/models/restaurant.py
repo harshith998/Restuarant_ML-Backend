@@ -20,6 +20,9 @@ if TYPE_CHECKING:
     from app.models.menu import MenuItem
     from app.models.metrics import RestaurantMetrics
     from app.models.review import Review
+    from app.models.ingredient import Ingredient
+    from app.models.recipe import Recipe
+    from app.models.kitchen_station import KitchenStation
 
 
 class Restaurant(Base):
@@ -66,6 +69,11 @@ class Restaurant(Base):
     )
     reviews: Mapped[List["Review"]] = relationship(
         "Review", back_populates="restaurant", cascade="all, delete-orphan"
+    ingredients: Mapped[List["Ingredient"]] = relationship(
+        "Ingredient", back_populates="restaurant", cascade="all, delete-orphan"
+    )
+    kitchen_stations: Mapped[List["KitchenStation"]] = relationship(
+        "KitchenStation", back_populates="restaurant", cascade="all, delete-orphan"
     )
 
     def __repr__(self) -> str:

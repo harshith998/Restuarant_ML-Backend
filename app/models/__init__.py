@@ -9,6 +9,20 @@ from app.models.menu import MenuItem, OrderItem
 from app.models.metrics import WaiterMetrics, RestaurantMetrics, MenuItemMetrics, TableStateLog
 from app.models.crop import CameraSource, CameraCropState, CropDispatchLog
 from app.models.review import Review
+from app.models.insights import WaiterInsights
+from app.models.scheduling import (
+    StaffAvailability,
+    StaffPreference,
+    Schedule,
+    ScheduleItem,
+    ScheduleRun,
+    ScheduleReasoning,
+    StaffingRequirements,
+)
+from app.models.analytics import ScheduleInsights
+from app.models.ingredient import Ingredient
+from app.models.recipe import Recipe
+from app.models.kitchen_station import KitchenStation
 
 __all__ = [
     "Restaurant",
@@ -28,4 +42,18 @@ __all__ = [
     "CameraCropState",
     "CropDispatchLog",
     "Review",
+    "WaiterInsights",
+    # Scheduling models
+    "StaffAvailability",
+    "StaffPreference",
+    "Schedule",
+    "ScheduleItem",
+    "ScheduleRun",
+    "ScheduleReasoning",
+    "StaffingRequirements",
+    # Analytics models
+    "ScheduleInsights",
+    "Ingredient",
+    "Recipe",
+    "KitchenStation"
 ]
