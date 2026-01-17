@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from sqlalchemy import String, Integer, Float, Boolean, Text, ForeignKey, DateTime, JSON
@@ -34,7 +34,7 @@ class Review(Base):
     review_identifier: Mapped[str] = mapped_column(String(255), unique=True)  # Unique per review
     rating: Mapped[int] = mapped_column(Integer)  # 1-5 stars
     text: Mapped[str] = mapped_column(Text)
-    review_date: Mapped[datetime] = mapped_column(DateTime)
+    review_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
     # LLM-generated insights (populated after categorization)
     sentiment_score: Mapped[float | None] = mapped_column(Float, nullable=True)  # -1.0 to 1.0
@@ -48,9 +48,9 @@ class Review(Base):
     # Values: "pending", "categorized", "dismissed"
 
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc)
     )
 
     # Relationship

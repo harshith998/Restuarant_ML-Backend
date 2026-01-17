@@ -1,0 +1,37 @@
+[
+  {
+    "platform": "yelp",
+    "review_identifier": "curl_test_001",
+    "rating": 5,
+    "text": "Amazing southern food! The shrimp and grits were incredible. Service was top-notch and the atmosphere was perfect for a family dinner.",
+    "review_date": "2024-01-15T12:00:00Z"
+  },
+  {
+    "platform": "yelp",
+    "review_identifier": "curl_test_002",
+    "rating": 4,
+    "text": "Great food and friendly staff. Portions were generous. Only complaint is that it was a bit crowded during peak hours.",
+    "review_date": "2024-01-14T18:30:00Z"
+  },
+  {
+    "platform": "yelp",
+    "review_identifier": "curl_test_003",
+    "rating": 2,
+    "text": "Service was extremely slow. Waited 45 minutes for our food and it arrived cold. Very disappointed.",
+    "review_date": "2024-01-10T19:00:00Z"
+  },
+  {
+    "platform": "yelp",
+    "review_identifier": "curl_test_004",
+    "rating": 5,
+    "text": "Best fried chicken I've ever had! The sides were delicious too. Highly recommend this place.",
+    "review_date": "2024-01-12T13:00:00Z"
+  },
+  {
+    "platform": "yelp",
+    "review_identifier": "curl_test_005",
+    "rating": 3,
+    "text": "Food was okay. Nothing special but not bad either. Prices are reasonable for the portions.",
+    "review_date": "2024-01-11T20:00:00Z"
+  }
+]

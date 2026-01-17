@@ -66,3 +66,18 @@ class ReviewSummary(BaseModel):
     category_opinions: CategoryOpinions
     overall_summary: str  # 2-3 sentence summary
     needs_attention: bool  # True if negative sentiment detected
+
+
+# API response schemas
+class IngestResponse(BaseModel):
+    """Response from review ingestion endpoint."""
+    added: int
+    total_submitted: int
+    status: str
+
+
+class CategorizationResponse(BaseModel):
+    """Response from categorization endpoint."""
+    processed: int
+    batches: int
+    pending_remaining: int
