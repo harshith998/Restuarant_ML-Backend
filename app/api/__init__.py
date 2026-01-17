@@ -6,6 +6,7 @@ from app.api.shifts import router as shifts_router
 from app.api.waitlist import router as waitlist_router
 from app.api.visits import router as visits_router
 from app.api.routing import router as routing_router
+from app.api.reviews import router as reviews_router
 from app.api.waiter_dashboard import router as waiter_dashboard_router
 from app.api.scheduling import router as scheduling_router
 from app.api.analytics import router as analytics_router
@@ -22,6 +23,7 @@ __all__ = [
     "waitlist_router",
     "visits_router",
     "routing_router",
+    "reviews_router",
     "waiter_dashboard_router",
     "scheduling_router",
     "analytics_router",

@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python test_llm_client.py:*)",
+      "Bash(python:*)",
+      "Bash(pip install:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker compose:*)",
+      "Bash(/c/Program Files/Docker/Docker/resources/bin/docker compose up -d db)",
+      "Bash(curl:*)",
+      "Bash(taskkill:*)"
+    ]
+  }
+}
