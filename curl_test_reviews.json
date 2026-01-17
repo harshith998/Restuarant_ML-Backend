@@ -1,0 +1,23 @@
+[
+  {
+    "platform": "yelp",
+    "review_identifier": "curl_fresh_001",
+    "rating": 5,
+    "text": "Outstanding brunch experience! The mimosas were perfectly crafted and the biscuits and gravy were divine.",
+    "review_date": "2024-01-18T10:30:00Z"
+  },
+  {
+    "platform": "yelp",
+    "review_identifier": "curl_fresh_002",
+    "rating": 4,
+    "text": "Really enjoyed our meal here. The catfish was crispy and well-seasoned. Would come back!",
+    "review_date": "2024-01-17T19:00:00Z"
+  },
+  {
+    "platform": "yelp",
+    "review_identifier": "curl_fresh_003",
+    "rating": 1,
+    "text": "Terrible experience. Rude staff and overpriced mediocre food. Will not return.",
+    "review_date": "2024-01-16T20:30:00Z"
+  }
+]
