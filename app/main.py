@@ -47,11 +47,14 @@ LOGGER = logging.getLogger("restaurant-platform")
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan handler for startup/shutdown events."""
-    # Startup
-    if settings.is_development:
-        # In development, create tables if they don't exist
-        # In production, use Alembic migrations
+    # Startup - always create tables if they don't exist
+    # This is safe because create_all() is idempotent
+    try:
         await init_db()
+        LOGGER.info("Database initialized")
+    except Exception as e:
+        LOGGER.error("Database initialization failed: %s", e)
+        raise
 
     # Initialize ML services if enabled
     if ML_ENABLED:
