@@ -65,7 +65,19 @@ async def db_session(db_engine) -> AsyncGenerator[AsyncSession, None]:
         expire_on_commit=False,
     )
     async with session_factory() as session:
+        # Override FastAPI's get_session dependency to use this test session
+        from app.database import get_session
+        from app.main import app
+
+        async def override_get_session():
+            yield session
+
+        app.dependency_overrides[get_session] = override_get_session
+
         yield session
+
+        # Clean up
+        app.dependency_overrides.clear()
         await session.rollback()
 
 
