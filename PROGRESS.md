@@ -2,6 +2,8 @@
 
 ## Current Phase
 Phase 1: PostgreSQL Schema + Core Models - **COMPLETE**
+Phase 2: Waiter Intelligence System - **COMPLETE**
+Phase 3: Scheduling System (Agent 1) - **COMPLETE**
 
 ## Directory Structure
 
@@ -171,6 +173,55 @@ All new development happens in the `app/` directory.
 - [x] Tests follow existing codebase patterns (async, fixtures, realistic scenarios)
 - [x] All 14 tests passing in <1 second
 - [x] Test execution: `pytest tests/test_reviews.py -v`
+### Phase 2: Waiter Intelligence System
+- [x] `WaiterInsights` model for storing LLM-generated analysis
+- [x] `MetricsAggregator` service - computes 30-day rolling metrics
+- [x] `TierCalculator` service - Z-score normalization + PRD formula
+- [x] `LLMScorer` service - robust LLM response parsing with fallbacks
+- [x] `TierRecalculationJob` - weekly job orchestrator (cron-compatible)
+- [x] `DashboardService` - aggregates waiter dashboard data
+- [x] `SeedService` - cold start data seeding
+- [x] Dashboard API endpoints:
+  - `GET /waiters/{id}/stats` - this month stats
+  - `GET /waiters/{id}/trends` - 6-month trend data
+  - `GET /waiters/{id}/insights` - LLM strengths/areas/suggestions
+  - `GET /waiters/{id}/shifts` - recent shifts
+  - `GET /waiters/{id}/dashboard` - unified endpoint
+  - `POST /restaurants/{id}/recalculate-tiers` - trigger tier job
+- [x] Cron entry point: `python -m app.jobs.tier_recalculation`
+- [x] LLM config in settings (OpenRouter, bytedance-seed/seed-1.6)
+- [x] 45 new tests (165 total passing)
+
+### Phase 3: Scheduling System (Agent 1)
+**Sub-task 1: Data Layer** - COMPLETE
+- [x] Extended Waiter model with `role` field (server, bartender, host, busser, runner)
+- [x] Added role-based scheduling properties (`requires_performance_tracking`, `is_availability_only`)
+- [x] 7 new scheduling models in `app/models/scheduling.py`:
+  - StaffAvailability (recurring weekly patterns like 7shifts)
+  - StaffPreference (role, shift type, section preferences, max hours)
+  - Schedule (weekly container with versioning)
+  - ScheduleItem (individual shift assignments with scores)
+  - ScheduleRun (engine run metadata)
+  - ScheduleReasoning (per-item explanations)
+  - StaffingRequirements (coverage config per time slot)
+- [x] Full Pydantic schemas for all scheduling entities
+- [x] 18 API endpoints in `app/api/scheduling.py`:
+  - Staff availability CRUD + bulk create
+  - Staff preferences upsert
+  - Schedules CRUD + publish + audit
+  - Schedule items CRUD
+  - Staffing requirements CRUD
+  - Engine run trigger + status
+
+**Sub-task 2: Scheduling Engine** - COMPLETE
+- [x] `DemandForecaster` service - weighted historical averages + trend prediction
+- [x] `ConstraintValidator` service - hard/soft constraint validation
+- [x] `FairnessCalculator` service - Gini coefficient, hours balance, prime shift equity
+- [x] `SchedulingEngine` service - score-and-rank algorithm orchestrator
+- [x] `ScheduleReasoningGenerator` service - rule-based + optional LLM explanations
+- [x] Engine integrated with run endpoint (`POST /api/v1/restaurants/{id}/schedules/run`)
+- [x] 46 new tests (211 total passing)
+- [x] Frontend call guide updated (`Frontend_Call_Guide_Scheduling_Analytics.md`)
 
 ## Architecture Overview
 
@@ -238,11 +289,38 @@ All new development happens in the `app/` directory.
 - `app/ml/crop_service.py` - Camera/crop management
 - `app/ml/crop_api.py` - Crop management endpoints
 
+### Waiter Intelligence Services
+- `app/models/insights.py` - WaiterInsights model
+- `app/schemas/insights.py` - Dashboard schemas
+- `app/services/metrics_aggregator.py` - Metrics computation
+- `app/services/tier_calculator.py` - Tier scoring logic
+- `app/services/llm_scorer.py` - LLM integration with robust parsing
+- `app/services/tier_job.py` - Weekly job orchestrator
+- `app/services/dashboard_service.py` - Dashboard data aggregation
+- `app/services/seed_service.py` - Cold start data seeding
+- `app/api/waiter_dashboard.py` - Dashboard endpoints
+- `app/jobs/__init__.py` - Jobs module
+- `app/jobs/tier_recalculation.py` - Cron entry point
+
+### Scheduling System
+- `app/models/scheduling.py` - 7 scheduling models
+- `app/schemas/scheduling.py` - Full Pydantic schemas
+- `app/api/scheduling.py` - 18 CRUD endpoints
+- `app/services/demand_forecaster.py` - Weighted avg + trend prediction
+- `app/services/scheduling_constraints.py` - Hard/soft constraint validation
+- `app/services/fairness_calculator.py` - Gini coefficient + hours balance
+- `app/services/scheduling_engine.py` - Score-and-rank orchestrator
+- `app/services/schedule_reasoning.py` - Explanation generation
+
 ### Tests
 - `tests/__init__.py`
 - `tests/conftest.py` - Fixtures with realistic restaurant data
 - `tests/test_models.py` - SQLAlchemy model tests
 - `tests/test_schemas.py` - Pydantic validation tests
+- `tests/test_tier_calculator.py` - Tier calculation tests
+- `tests/test_llm_scorer.py` - LLM parsing tests
+- `tests/test_scheduling.py` - Scheduling data layer tests (28 tests)
+- `tests/test_scheduling_engine.py` - Engine service tests (18 tests)
 - `pytest.ini` - Pytest configuration
 
 ### Infrastructure
@@ -295,19 +373,26 @@ ML_ENABLED=true uvicorn app.main:app --reload
 
 ## Notes for Next Agent
 
-- All 36 tests passing
+- All 211 tests passing
 - ML services in `app/ml/` - enable with `ML_ENABLED=true`
 - **POC code in `_legacy_poc/` is reference only - do not modify**
 - Use JSON instead of JSONB for SQLite test compatibility
 - Reference PRD.md Section 4.2 for routing algorithm details
+- Reference `Frontend_Call_Guide_Scheduling_Analytics.md` for scheduling API usage
+- Scheduling engine uses score-and-rank algorithm with:
+  - Weighted historical demand forecasting
+  - Hard/soft constraint validation
+  - Fairness scoring (Gini coefficient)
+  - Role-based scheduling (servers/bartenders get performance tracking, hosts/bussers/runners are availability-only)
 
 ## Phase Overview
 
 | Phase | Description | Status |
 |-------|-------------|--------|
 | 1 | PostgreSQL Schema + Core Models | **COMPLETE** |
-| 2 | Routing API Endpoints | Next |
-| 3 | State + Waitlist Endpoints | Pending |
-| 4 | Analytics Endpoints | Pending |
-| 5 | Webhooks (ML/POS) | Pending |
-| 6 | WebSocket Layer | Pending |
+| 2 | Routing API + Waiter Intelligence | **COMPLETE** |
+| 3 | State + Waitlist Endpoints | Done |
+| 4 | Analytics/Dashboard Endpoints | **COMPLETE** |
+| 5 | Scheduling System (Agent 1) | **COMPLETE** |
+| 6 | Webhooks (ML/POS) | Pending |
+| 7 | WebSocket Layer | Pending |

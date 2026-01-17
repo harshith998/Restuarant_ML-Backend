@@ -1,8 +1,3 @@
-"""
-Restaurant Intelligence Platform - FastAPI Application
-
-Main entry point for the API server.
-"""
 from __future__ import annotations
 
 import logging
@@ -14,7 +9,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.database import close_db, init_db
+from app.database import close_db, get_session_context, init_db
+from app.services.seed_service import SeedService
 
 # Import all models to register them with Base BEFORE init_db
 # This ensures create_all() sees all tables
@@ -36,6 +32,19 @@ from app.models import (  # noqa: F401
     CameraCropState,
     CropDispatchLog,
     Review,
+    # Scheduling models
+    StaffAvailability,
+    StaffPreference,
+    Schedule,
+    ScheduleItem,
+    ScheduleRun,
+    ScheduleReasoning,
+    StaffingRequirements,
+    # Analytics models
+    ScheduleInsights,
+    Ingredient,
+    Recipe,
+    KitchenStation,
 )
 
 # ML services (optional - only load if ML is enabled)
@@ -56,6 +65,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         LOGGER.error("Database initialization failed: %s", e)
         raise
+
+    # Auto-seed default data in development if DB is empty
+    if settings.is_development:
+        try:
+            async with get_session_context() as session:
+                seed_service = SeedService(session)
+                result = await seed_service.ensure_default_data()
+                if result.get("restaurants_created", 0) > 0:
+                    LOGGER.info("Seeded default data: %s", result)
+                else:
+                    LOGGER.info("Default data already present; skipping seeding")
+        except Exception as e:
+            LOGGER.warning("Default data seeding failed: %s", e)
 
     # Initialize ML services if enabled
     if ML_ENABLED:
@@ -91,15 +113,23 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Configure CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins_list,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
+# Configure CORS (needed for browser preflight requests)
+if settings.is_development:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins_list,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 @app.get("/healthz")
 async def health_check() -> dict:
@@ -135,7 +165,13 @@ from app.api import (
     visits_router,
     routing_router,
     reviews_router,
+    waiter_dashboard_router,
+    scheduling_router,
+    analytics_router,
 )
+from app.api.menu_analytics import router as menu_analytics_router
+from app.api.inventory import router as inventory_router
+from app.api.kitchen_routing import router as kitchen_routing_router
 
 app.include_router(restaurants_router)
 app.include_router(tables_router)
@@ -145,3 +181,10 @@ app.include_router(waitlist_router)
 app.include_router(visits_router)
 app.include_router(routing_router)
 app.include_router(reviews_router)
+app.include_router(waiter_dashboard_router)
+app.include_router(scheduling_router)
+app.include_router(analytics_router)
+app.include_router(menu_analytics_router)
+app.include_router(inventory_router)
+app.include_router(kitchen_routing_router)
+

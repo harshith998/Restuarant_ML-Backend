@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from app.models.restaurant import Restaurant
     from app.models.visit import Visit
     from app.models.metrics import MenuItemMetrics
+    from app.models.recipe import Recipe
 
 
 class MenuItem(Base):
@@ -54,6 +55,9 @@ class MenuItem(Base):
     metrics: Mapped[List["MenuItemMetrics"]] = relationship(
         "MenuItemMetrics", back_populates="menu_item", cascade="all, delete-orphan"
     )
+    recipes: Mapped[List["Recipe"]] = relationship(
+        "Recipe", back_populates="menu_item", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<MenuItem(id={self.id}, name={self.name}, price={self.price})>"
@@ -88,6 +92,7 @@ class OrderItem(Base):
     menu_item: Mapped["MenuItem"] = relationship(
         "MenuItem", back_populates="order_items"
     )
+    
 
     def __repr__(self) -> str:
         return f"<OrderItem(id={self.id}, menu_item_id={self.menu_item_id}, quantity={self.quantity})>"
