@@ -3,8 +3,8 @@ SAM3-based Table State Classifier.
 
 Classifies table states using SAM3 segmentation:
 - Occupied: Person detected with mask area > 25% of crop
-- Dirty: No person (or small area), but plate(s) or menu(s) detected
-- Clean: No person, no plates, no menus
+- Dirty: No person (or small area), but plate(s) detected
+- Clean: No person, no plates
 """
 from __future__ import annotations
 
@@ -20,7 +20,6 @@ LOGGER = logging.getLogger("restaurant-ml")
 # Detection thresholds
 PERSON_THRESHOLD = 0.5
 PLATE_THRESHOLD = 0.4
-MENU_THRESHOLD = 0.4
 
 # Area threshold for occupied classification (person mask > 25% of crop)
 PERSON_AREA_THRESHOLD = 0.25
@@ -31,8 +30,8 @@ class SAM3Classifier:
     Table state classifier using SAM3 segmentation.
 
     Classification logic:
-    1. Detect "person" - if total mask area > 25% of frame -> occupied
-    2. Detect "plate" and "menu" - if any detected -> dirty
+    1. Detect "person" - if total mask area > 25% of frame -> occupied (stop)
+    2. Detect "plate" - if any detected -> dirty
     3. Otherwise -> clean
 
     Args:
@@ -154,8 +153,8 @@ class SAM3Classifier:
         Predict table state from image using SAM3.
 
         Classification logic:
-        1. Detect "person" - if total mask area > 25% of frame -> occupied
-        2. Detect "plate" or "menu" - if any detected -> dirty
+        1. Detect "person" - if total mask area > 25% of frame -> occupied (stop)
+        2. Detect "plate" - if any detected -> dirty
         3. Otherwise -> clean
 
         Args:
@@ -174,7 +173,7 @@ class SAM3Classifier:
         img_width, img_height = image.size
         total_pixels = img_width * img_height
 
-        # Step 1: Check for person
+        # Step 1: Check for person - STOP if found
         person_detections, person_masks = self._detect_objects(
             image, "person", PERSON_THRESHOLD
         )
@@ -184,7 +183,7 @@ class SAM3Classifier:
         person_area_ratio = total_person_area / total_pixels if total_pixels > 0 else 0.0
 
         if person_detections and person_area_ratio >= self.person_area_threshold:
-            # Person detected with sufficient area -> occupied
+            # Person detected with sufficient area -> occupied, STOP HERE
             confidence = min(0.99, 0.5 + person_area_ratio)
             return {
                 "label": "occupied",
@@ -201,20 +200,14 @@ class SAM3Classifier:
                 },
             }
 
-        # Step 2: Check for plates
+        # Step 2: Check for plates (only if no person)
         plate_detections, plate_masks = self._detect_objects(
             image, "plate", PLATE_THRESHOLD
         )
 
-        # Step 3: Check for menus
-        menu_detections, menu_masks = self._detect_objects(
-            image, "menu", MENU_THRESHOLD
-        )
-
-        if plate_detections or menu_detections:
-            # Plates or menus detected -> dirty
-            total_objects = len(plate_detections) + len(menu_detections)
-            confidence = min(0.95, 0.5 + 0.1 * total_objects)
+        if plate_detections:
+            # Plates detected -> dirty
+            confidence = min(0.95, 0.5 + 0.1 * len(plate_detections))
             return {
                 "label": "dirty",
                 "confidence": round(confidence, 4),
@@ -225,13 +218,11 @@ class SAM3Classifier:
                 },
                 "details": {
                     "plate_detections": len(plate_detections),
-                    "menu_detections": len(menu_detections),
                     "plate_scores": [d["score"] for d in plate_detections],
-                    "menu_scores": [d["score"] for d in menu_detections],
                 },
             }
 
-        # Step 4: Nothing significant detected -> clean
+        # Step 3: Nothing significant detected -> clean
         # If we detected a person but area was too small, note it
         if person_detections:
             confidence = 0.7  # Some person detected but small area
@@ -240,7 +231,7 @@ class SAM3Classifier:
                 "person_area_ratio": round(person_area_ratio, 4),
             }
         else:
-            confidence = 0.9  # No person, no plates, no menus
+            confidence = 0.9  # No person, no plates
             details = {}
 
         return {
