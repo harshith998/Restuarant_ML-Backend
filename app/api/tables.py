@@ -33,14 +33,17 @@ async def list_tables(
 
     Optionally filter by state or section.
     """
-    service = TableService(session)
-
+    stmt = select(Table).where(Table.restaurant_id == restaurant_id)
     if state:
-        tables = await service.get_tables_by_state(restaurant_id, state)
-    else:
-        tables = await service.get_floor_status(restaurant_id)
-        # Convert to TableRead format
-        return tables  # get_floor_status already returns dict format
+        stmt = stmt.where(Table.state == state)
+    if section_id:
+        stmt = stmt.where(Table.section_id == section_id)
+    if not include_inactive:
+        stmt = stmt.where(Table.is_active == True)  # noqa: E712
+    stmt = stmt.order_by(Table.table_number)
+
+    result = await session.execute(stmt)
+    tables = result.scalars().all()
 
     return [TableRead.model_validate(t) for t in tables]
 

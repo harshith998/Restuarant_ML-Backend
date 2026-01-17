@@ -49,7 +49,7 @@ class CameraCropState(Base):
     last_capture_ts: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     last_frame_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     last_dispatched_frame_index: Mapped[Dict[str, int]] = mapped_column(
-        JSON_TYPE, default=dict
+        JSON_TYPE, default=lambda: {}
     )
 
     camera: Mapped["CameraSource"] = relationship(

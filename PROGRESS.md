@@ -60,6 +60,10 @@ All new development happens in the `app/` directory.
   - Periodic scheduler for classifier dispatch
 - [x] `crop_api.py` - `/crops/*` endpoints
 
+### Maintenance
+- [x] Fixed mutable SQLAlchemy defaults for JSON columns
+- [x] Normalized table list responses and async delete usage
+
 ## Architecture Overview
 
 ```
