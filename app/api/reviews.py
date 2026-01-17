@@ -16,7 +16,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session, get_session_context
 from app.models.review import Review
-from app.schemas.review import ReviewCreate, ReviewRead, ReviewStats, ReviewSummary
+from app.schemas.review import (
+    CategorizationResponse,
+    IngestResponse,
+    ReviewCreate,
+    ReviewRead,
+    ReviewStats,
+    ReviewSummary,
+)
 from app.services import review_categorization, review_ingestion, review_stats, review_summary
 
 logger = logging.getLogger(__name__)
@@ -41,25 +48,23 @@ async def _background_categorization(restaurant_id: UUID) -> None:
             logger.error(f"Background categorization failed: {e}")
 
 
-@router.post("/{restaurant_id}/ingest")
+@router.post("/{restaurant_id}/ingest", response_model=IngestResponse)
 async def ingest_reviews(
     restaurant_id: UUID,
     file: UploadFile = File(...),
-    background_tasks: BackgroundTasks | None = None,
     session: AsyncSession = Depends(get_session),
-) -> dict:
+) -> IngestResponse:
     """
     Ingest reviews from JSON file.
-    Triggers background categorization.
+    Background categorization disabled (would need proper task queue).
 
     Args:
         restaurant_id: UUID of the restaurant
         file: JSON file with review data
-        background_tasks: FastAPI background tasks manager
         session: Database session
 
     Returns:
-        Dictionary with ingestion results
+        IngestResponse with ingestion results
 
     Example:
         curl -X POST http://localhost:8000/api/v1/reviews/{restaurant_id}/ingest \\
@@ -88,11 +93,11 @@ async def ingest_reviews(
     # if background_tasks and added > 0:
     #     background_tasks.add_task(_background_categorization, restaurant_id)
 
-    return {
-        "added": added,
-        "total_submitted": len(reviews),
-        "status": "pending_categorization" if added > 0 else "no_new_reviews",
-    }
+    return IngestResponse(
+        added=added,
+        total_submitted=len(reviews),
+        status="pending_categorization" if added > 0 else "no_new_reviews",
+    )
 
 
 @router.get("/{restaurant_id}/stats", response_model=ReviewStats)
@@ -170,11 +175,11 @@ async def get_reviews(
     return list(result.scalars().all())
 
 
-@router.post("/{restaurant_id}/categorize")
+@router.post("/{restaurant_id}/categorize", response_model=CategorizationResponse)
 async def trigger_categorization(
     restaurant_id: UUID,
     session: AsyncSession = Depends(get_session),
-) -> dict:
+) -> CategorizationResponse:
     """
     Manually trigger LLM categorization for pending reviews.
 
@@ -191,4 +196,4 @@ async def trigger_categorization(
     result = await review_categorization.categorize_reviews_batch(
         restaurant_id, session, batch_size=25
     )
-    return result
+    return CategorizationResponse(**result)
