@@ -21,8 +21,8 @@ LOGGER = logging.getLogger("restaurant-ml")
 PERSON_THRESHOLD = 0.5
 PLATE_THRESHOLD = 0.4
 
-# Area threshold for occupied classification (person mask > 25% of crop)
-PERSON_AREA_THRESHOLD = 0.25
+# Area threshold for occupied classification (person mask > 15% of crop)
+PERSON_AREA_THRESHOLD = 0.15
 
 
 class SAM3Classifier:
