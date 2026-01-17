@@ -52,6 +52,13 @@ paths, causing inconsistent validation and response shapes.
 **Solution**: Always return model instances (or validate dicts into models)
 across all branches to match the declared response type.
 
+### Missing Default Data (Dev)
+**Problem**: The app starts with no restaurant/section/waiter data in a fresh
+local database.
+**Solution**: In development (`APP_ENV=development`), the app auto-seeds default
+data at startup when the DB is empty. Make sure the DB is running, or call
+`POST /api/v1/seed/default-data` manually if needed.
+
 ## Docker
 
 ### Volume Permissions

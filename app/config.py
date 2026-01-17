@@ -39,6 +39,16 @@ class Settings(BaseSettings):
     # CORS
     cors_origins: str = "http://localhost:3000"
 
+    # LLM Settings (OpenRouter)
+    llm_enabled: bool = True
+    llm_model: str = "bytedance-seed/seed-1.6"
+    llm_api_base: str = "https://openrouter.ai/api/v1"
+    llm_api_key: str = ""  # Set via OPENROUTER_API_KEY env var
+
+    # Tier Calculation Settings
+    tier_lookback_days: int = 30
+    tier_recalc_day: int = 0  # 0=Monday, 6=Sunday
+
     @property
     def cors_origins_list(self) -> List[str]:
         """Parse CORS origins from comma-separated string."""
