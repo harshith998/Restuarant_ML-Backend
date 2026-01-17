@@ -35,6 +35,7 @@ from app.models import (  # noqa: F401
     CameraSource,
     CameraCropState,
     CropDispatchLog,
+    Review,
 )
 
 # ML services (optional - only load if ML is enabled)
@@ -133,6 +134,7 @@ from app.api import (
     waitlist_router,
     visits_router,
     routing_router,
+    reviews_router,
 )
 
 app.include_router(restaurants_router)
@@ -142,3 +144,4 @@ app.include_router(shifts_router)
 app.include_router(waitlist_router)
 app.include_router(visits_router)
 app.include_router(routing_router)
+app.include_router(reviews_router)
