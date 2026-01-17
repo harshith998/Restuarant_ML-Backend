@@ -19,6 +19,9 @@ from app.models.scheduling import (
     StaffingRequirements,
 )
 from app.models.analytics import ScheduleInsights
+from app.models.ingredient import Ingredient
+from app.models.recipe import Recipe
+from app.models.kitchen_station import KitchenStation
 
 __all__ = [
     "Restaurant",
@@ -48,4 +51,7 @@ __all__ = [
     "StaffingRequirements",
     # Analytics models
     "ScheduleInsights",
+    "Ingredient",
+    "Recipe",
+    "KitchenStation"
 ]
