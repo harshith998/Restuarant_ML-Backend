@@ -5,7 +5,7 @@ Handles:
 - Video metadata extraction (ffprobe)
 - Frame extraction (ffmpeg)
 - Table crop extraction
-- DINOv3 classification
+- ML classification (DINOv3 or SAM3, configurable via CLASSIFIER_BACKEND env var)
 - Database updates
 """
 from __future__ import annotations
