@@ -35,6 +35,9 @@ from app.models import (  # noqa: F401
     CameraSource,
     CameraCropState,
     CropDispatchLog,
+    VideoJob,
+    ExtractedFrame,
+    FrameClassification,
 )
 
 # ML services (optional - only load if ML is enabled)
@@ -133,6 +136,7 @@ from app.api import (
     waitlist_router,
     visits_router,
     routing_router,
+    video_router,
 )
 
 app.include_router(restaurants_router)
@@ -142,3 +146,12 @@ app.include_router(shifts_router)
 app.include_router(waitlist_router)
 app.include_router(visits_router)
 app.include_router(routing_router)
+app.include_router(video_router)
+
+# Mount static files for video frames
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
+
+uploads_dir = Path("uploads")
+uploads_dir.mkdir(exist_ok=True)
+app.mount("/static", StaticFiles(directory="uploads"), name="static")

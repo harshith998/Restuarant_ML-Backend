@@ -8,6 +8,7 @@ from app.models.visit import Visit
 from app.models.menu import MenuItem, OrderItem
 from app.models.metrics import WaiterMetrics, RestaurantMetrics, MenuItemMetrics, TableStateLog
 from app.models.crop import CameraSource, CameraCropState, CropDispatchLog
+from app.models.video import VideoJob, ExtractedFrame, FrameClassification
 
 __all__ = [
     "Restaurant",
@@ -26,4 +27,7 @@ __all__ = [
     "CameraSource",
     "CameraCropState",
     "CropDispatchLog",
+    "VideoJob",
+    "ExtractedFrame",
+    "FrameClassification",
 ]
