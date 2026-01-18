@@ -225,52 +225,74 @@ def send_to_server(
     frame: np.ndarray,
     crop_json: dict,
     endpoint: str,
-    timeout: float = 10.0,
-) -> Tuple[Optional[np.ndarray], float]:
+    timeout: float = 30.0,
+    jpeg_quality: int = 85,
+) -> Tuple[Optional[np.ndarray], dict]:
     """
     Send frame to SAM3 server, return annotated frame.
 
+    Resizes frame to match crop_json dimensions (frame_width, frame_height).
+
     Returns:
-        Tuple of (annotated_frame, latency_seconds)
+        Tuple of (annotated_frame, timing_dict)
     """
+    timings = {}
     start = time.time()
 
-    # Scale crop_json to match frame dimensions
     frame_height, frame_width = frame.shape[:2]
-    scaled_crop_json = scale_crop_json(crop_json, frame_width, frame_height)
 
-    # Encode frame as JPEG
-    _, jpeg_bytes = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    # Resize to match crop_json dimensions
+    target_width = crop_json.get("frame_width", frame_width)
+    target_height = crop_json.get("frame_height", frame_height)
 
-    # Prepare multipart form
+    if frame_width != target_width or frame_height != target_height:
+        frame = cv2.resize(frame, (target_width, target_height), interpolation=cv2.INTER_AREA)
+        frame_width, frame_height = target_width, target_height
+
+    timings["resize"] = time.time() - start
+
+    # Encode frame as JPEG (lower quality for speed)
+    encode_start = time.time()
+    _, jpeg_bytes = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, jpeg_quality])
+    timings["encode"] = time.time() - encode_start
+    timings["size_kb"] = len(jpeg_bytes) / 1024
+
+    # Prepare multipart form (no scaling needed - frame matches crop_json dimensions)
     files = {
         "image": ("frame.jpg", jpeg_bytes.tobytes(), "image/jpeg"),
     }
     data = {
-        "crop_json": json.dumps(scaled_crop_json),
+        "crop_json": json.dumps(crop_json),
     }
 
     try:
+        upload_start = time.time()
         response = requests.post(endpoint, files=files, data=data, timeout=timeout)
-        latency = time.time() - start
+        timings["network"] = time.time() - upload_start
+        timings["total"] = time.time() - start
 
         if response.status_code == 200:
             # Decode response JPEG
+            decode_start = time.time()
             arr = np.frombuffer(response.content, dtype=np.uint8)
             annotated = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-            return annotated, latency
+            timings["decode"] = time.time() - decode_start
+            timings["response_kb"] = len(response.content) / 1024
+            return annotated, timings
         else:
             LOGGER.warning(f"Server returned {response.status_code}: {response.text[:100]}")
-            return None, latency
+            return None, timings
 
     except requests.exceptions.Timeout:
-        latency = time.time() - start
-        LOGGER.warning(f"Request timed out after {latency:.1f}s")
-        return None, latency
+        timings["total"] = time.time() - start
+        timings["error"] = "timeout"
+        LOGGER.warning(f"Request timed out after {timings['total']:.1f}s")
+        return None, timings
     except Exception as e:
-        latency = time.time() - start
+        timings["total"] = time.time() - start
+        timings["error"] = str(e)
         LOGGER.error(f"Request failed: {e}")
-        return None, latency
+        return None, timings
 
 
 def run_live_viewer(
@@ -324,35 +346,38 @@ def run_live_viewer(
                 continue
 
             # Send to server
-            annotated, latency = send_to_server(frame, crop_json, endpoint)
+            annotated, timings = send_to_server(frame, crop_json, endpoint)
 
             if annotated is not None:
                 last_annotated = annotated
                 frame_count += 1
+                latency = timings.get("total", 0)
                 total_latency += latency
                 avg_latency = total_latency / frame_count
 
-                # Add latency overlay
+                # Add timing overlay
+                overlay_text = f"Total: {latency:.2f}s | Net: {timings.get('network', 0):.2f}s | {timings.get('size_kb', 0):.0f}KB"
                 cv2.putText(
                     last_annotated,
-                    f"Latency: {latency:.2f}s (avg: {avg_latency:.2f}s)",
+                    overlay_text,
                     (10, last_annotated.shape[0] - 10),
                     cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6,
+                    0.5,
                     (0, 255, 0),
                     2,
                 )
 
-                LOGGER.info(f"Frame {frame_count}: {latency:.2f}s latency")
+                LOGGER.info(f"Frame {frame_count}: total={latency:.2f}s net={timings.get('network', 0):.2f}s upload={timings.get('size_kb', 0):.0f}KB")
             else:
                 # Show original frame with error overlay
                 last_annotated = frame.copy()
+                error_msg = timings.get("error", "unknown error")
                 cv2.putText(
                     last_annotated,
-                    "Server error - showing raw frame",
+                    f"Server error: {error_msg}",
                     (10, 30),
                     cv2.FONT_HERSHEY_SIMPLEX,
-                    0.8,
+                    0.6,
                     (0, 0, 255),
                     2,
                 )
