@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.app_env == "production"
 
+    # Google AI (for chatbot)
+    google_api_key: str | None = None
+    gemini_model: str = "gemini-3-flash"
+
 
 @lru_cache
 def get_settings() -> Settings:
