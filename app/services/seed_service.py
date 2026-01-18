@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import random
 from datetime import datetime, timedelta, time
 from decimal import Decimal
 from typing import List, Optional
@@ -2447,7 +2448,7 @@ class SeedService:
                 unit=ing_data["unit"],
                 cost_per_unit=Decimal(str(ing_data["cost_per_unit"])),
                 par_level=ing_data["par_level"],
-                current_stock=Decimal(str(ing_data["par_level"] * 0.8)),  # Start at 80% stock
+                current_stock=Decimal(str(ing_data["par_level"] * random.uniform(0.1, 0.95))),  # Varied stock levels
                 supplier=ing_data["supplier"],
             )
             self.session.add(ingredient)

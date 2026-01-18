@@ -64,6 +64,10 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.app_env == "production"
 
+    # Chatbot (via OpenRouter)
+    openrouter_api_key: str = ""
+    gemini_model: str = "google/gemini-2.0-flash-001"
+
 
 @lru_cache
 def get_settings() -> Settings:

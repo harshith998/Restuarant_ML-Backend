@@ -83,7 +83,8 @@ class DashboardService:
 
         # Calculate averages
         avg_per_cover = sales / covers if covers > 0 else 0
-        efficiency_pct = min(100, (covers / max(visits, 1)) * 10) if visits > 0 else 0
+        # Efficiency: covers per visit, normalized so ~2.75 covers/visit = 75%
+        efficiency_pct = min(100, (covers / max(visits, 1)) / 3.5 * 100) if visits > 0 else 0
 
         return WaiterStatsResponse(
             covers=covers,
@@ -369,11 +370,14 @@ class DashboardService:
         tables_served = waiter.total_tables_served or 0
         total_sales = float(waiter.total_sales or 0)
 
+        # Efficiency: covers per table, normalized so ~2.75 covers/table = 75%
+        efficiency_pct = round(min(100.0, (covers / tables_served) / 3.5 * 100), 1) if tables_served > 0 else 0.0
+
         stats = WaiterStatsResponse(
             covers=covers,
             tips=tips,
             avg_per_cover=round(total_sales / covers, 2) if covers > 0 else 0.0,
-            efficiency_pct=round(min(100.0, (covers / tables_served) * 10), 1) if tables_served > 0 else 0.0,
+            efficiency_pct=efficiency_pct,
             tables_served=tables_served,
             total_sales=total_sales,
         )

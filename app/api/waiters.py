@@ -64,6 +64,9 @@ async def list_waiters(
     if not include_inactive:
         query = query.where(Waiter.is_active == True)
 
+    # Only return staff with performance tracking (servers and bartenders)
+    query = query.where(Waiter.role.in_(["server", "bartender"]))
+
     query = query.order_by(Waiter.name)
 
     result = await session.execute(query)
@@ -77,11 +80,15 @@ async def list_waiters(
         tables_served = w.total_tables_served or 0
         total_sales = float(w.total_sales or 0)
 
+        # Efficiency: covers per table, normalized so ~2.75 covers/table = 75%
+        # Formula: (covers/tables) / 3.5 * 100, capped at 100%
+        efficiency_pct = min(100.0, (covers / tables_served) / 3.5 * 100) if tables_served > 0 else 0.0
+
         stats = WaiterStats(
             covers=covers,
             tips=tips,
             avg_per_cover=total_sales / covers if covers > 0 else 0.0,
-            efficiency_pct=min(100.0, (covers / tables_served) * 10) if tables_served > 0 else 0.0,
+            efficiency_pct=efficiency_pct,
             tables_served=tables_served,
             total_sales=total_sales,
         )

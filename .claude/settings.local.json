@@ -8,7 +8,8 @@
       "Bash(docker compose:*)",
       "Bash(/c/Program Files/Docker/Docker/resources/bin/docker compose up -d db)",
       "Bash(curl:*)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(pip show:*)"
     ]
   }
 }
