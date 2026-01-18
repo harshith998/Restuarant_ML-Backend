@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from app.models.visit import Visit
     from app.models.menu import MenuItem
     from app.models.metrics import RestaurantMetrics
+    from app.models.review import Review
     from app.models.ingredient import Ingredient
     from app.models.recipe import Recipe
     from app.models.kitchen_station import KitchenStation
@@ -34,6 +35,7 @@ class Restaurant(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     timezone: Mapped[str] = mapped_column(String(50), default="America/New_York")
+    yelp_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     config: Mapped[Dict[str, Any]] = mapped_column(JSON, default=lambda: {})
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -65,6 +67,8 @@ class Restaurant(Base):
     metrics: Mapped[List["RestaurantMetrics"]] = relationship(
         "RestaurantMetrics", back_populates="restaurant", cascade="all, delete-orphan"
     )
+    reviews: Mapped[List["Review"]] = relationship(
+        "Review", back_populates="restaurant", cascade="all, delete-orphan"
     ingredients: Mapped[List["Ingredient"]] = relationship(
         "Ingredient", back_populates="restaurant", cascade="all, delete-orphan"
     )

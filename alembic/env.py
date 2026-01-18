@@ -34,6 +34,7 @@ from app.models import (
     CameraSource,
     CameraCropState,
     CropDispatchLog,
+    Review,
 )
 
 # Alembic Config object
@@ -51,8 +52,13 @@ settings = get_settings()
 
 
 def get_url() -> str:
-    """Get database URL from settings."""
-    return settings.database_url
+    """Get database URL from settings (converted to sync for migrations)."""
+    # Convert async URL to sync URL for migrations
+    # This avoids Windows timezone issues with asyncpg
+    url = settings.database_url
+    if "+asyncpg" in url:
+        url = url.replace("+asyncpg", "+psycopg")
+    return url
 
 
 def run_migrations_offline() -> None:
@@ -91,6 +97,11 @@ async def run_async_migrations() -> None:
     configuration = config.get_section(config.config_ini_section)
     configuration["sqlalchemy.url"] = get_url()
 
+    # Windows fix: Set timezone in connect_args for asyncpg
+    configuration["sqlalchemy.connect_args"] = {
+        "server_settings": {"timezone": "UTC", "jit": "off"}
+    }
+
     connectable = async_engine_from_config(
         configuration,
         prefix="sqlalchemy.",
@@ -105,7 +116,23 @@ async def run_async_migrations() -> None:
 
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
-    asyncio.run(run_async_migrations())
+    # Use synchronous mode with psycopg to avoid Windows timezone issues
+    from sqlalchemy import engine_from_config
+
+    configuration = config.get_section(config.config_ini_section)
+    configuration["sqlalchemy.url"] = get_url()
+
+    connectable = engine_from_config(
+        configuration,
+        prefix="sqlalchemy.",
+        poolclass=pool.NullPool,
+    )
+
+    with connectable.connect() as connection:
+        context.configure(connection=connection, target_metadata=target_metadata)
+
+        with context.begin_transaction():
+            context.run_migrations()
 
 
 if context.is_offline_mode():

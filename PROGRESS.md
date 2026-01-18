@@ -102,6 +102,113 @@ All new development happens in the `app/` directory.
 - [x] Fixed mutable SQLAlchemy defaults for JSON columns
 - [x] Normalized table list responses and async delete usage
 
+### Review Management System - Stream A: LLM Client (COMPLETE)
+- [x] `app/services/llm_client.py` - OpenRouter API integration
+  - Async function `call_llm()` with configurable prompts and temperature
+  - JSON response parsing with validation
+  - Retry logic (3 attempts with exponential backoff: 1s, 2s, 4s)
+  - Comprehensive error handling (timeout, auth, rate limit, parsing)
+  - Request logging for debugging
+  - Custom exception classes (LLMError, LLMTimeoutError, LLMAuthError, etc.)
+- [x] Environment configuration for OpenRouter
+  - `.env.local` - Contains API key: `OPENROUTER_API_KEY`
+  - `.env.example` - Template with placeholder values
+  - Model: `bytedance-seed/seed-1.6`
+- [x] Test scripts
+  - `test_llm_client.py` - Full integration test (requires app dependencies)
+  - `test_llm_standalone.py` - Minimal standalone test (only needs httpx + dotenv)
+
+### Review Management System - Stream B: Database Schema (COMPLETE)
+- [x] `app/models/review.py` - Review model with all fields
+  - Primary key (UUID), foreign key to restaurants
+  - Scraped data fields (platform, review_identifier, rating, text, review_date)
+  - LLM-generated fields (sentiment_score, category_opinions, overall_summary, needs_attention)
+  - Processing status tracking (pending/categorized/dismissed)
+  - Timestamps (created_at, updated_at)
+- [x] `app/schemas/review.py` - Pydantic schemas
+  - ReviewCreate - For scraper JSON ingestion
+  - ReviewRead - For API responses
+  - RatingDistribution - Star distribution (1-5)
+  - ReviewStats - Aggregate statistics
+  - CategoryOpinions - Five category narratives
+  - ReviewSummary - LLM-generated insights
+- [x] Database migration
+  - Alembic migration created and applied
+  - Review table with all columns and constraints
+
+### Review Management System - Stream D: Review Services (COMPLETE)
+- [x] `app/services/review_ingestion.py` - Bulk review ingestion
+  - Function: `bulk_ingest(restaurant_id, reviews, session)`
+  - Skips duplicates by review_identifier
+  - Returns count of newly added reviews
+  - Comprehensive logging
+- [x] `app/services/review_stats.py` - SQL-based statistics
+  - Function: `get_review_stats(restaurant_id, session)`
+  - Calculates overall average, total count, this month count
+  - Rating distribution across 1-5 stars
+  - Pure SQL aggregation (no LLM calls)
+- [x] `app/services/review_categorization.py` - LLM categorization
+  - Function: `categorize_reviews_batch(restaurant_id, session, batch_size=25)`
+  - Processes pending reviews in batches
+  - Uses LLM to generate category opinions (food, service, atmosphere, value, cleanliness)
+  - Updates reviews with sentiment scores and needs_attention flags
+  - Error handling with batch-level retries
+- [x] `app/services/review_summary.py` - Aggregate summary
+  - Function: `get_aggregate_summary(restaurant_id, session)`
+  - Retrieves most recent categorization results
+  - Returns formatted CategoryOpinions and overall summary
+  - Handles case when no reviews are categorized yet
+- [x] Updated `app/services/__init__.py` to export review services
+
+### Review Management System - Stream E: API Endpoints (COMPLETE)
+- [x] `app/api/reviews.py` - REST API router with 5 endpoints
+  - POST `/{restaurant_id}/ingest` - Upload JSON reviews file
+    - Validates JSON format and review schemas
+    - Triggers background LLM categorization
+    - Returns count of newly added reviews
+  - GET `/{restaurant_id}/stats` - Aggregate statistics
+    - Returns overall average, total count, this month count
+    - Rating distribution (1-5 stars)
+    - No LLM calls, pure SQL
+  - GET `/{restaurant_id}/summary` - LLM-generated insights
+    - Returns category opinions (food, service, atmosphere, value, cleanliness)
+    - Overall summary and needs_attention flag
+  - GET `/{restaurant_id}/reviews` - Paginated review list
+    - Supports skip/limit pagination
+    - Returns full review objects with LLM data
+  - POST `/{restaurant_id}/categorize` - Manual LLM trigger
+    - Processes pending reviews in batches
+    - Returns processing summary
+- [x] Background task implementation for async categorization
+  - Uses `get_session_context()` to create new session
+  - Handles errors gracefully with logging
+- [x] Updated `app/api/__init__.py` to export reviews_router
+- [x] Updated `app/main.py` to include reviews_router
+- [x] All endpoints validated and registered at `/api/v1/reviews/*`
+
+### Review Management System - Stream F: Testing (COMPLETE)
+- [x] `tests/test_reviews.py` - Comprehensive test suite (14 tests, 100% passing)
+  - **Service Layer Tests (8 tests)**
+    - test_bulk_ingest_new_reviews - Validates ingestion of new reviews
+    - test_bulk_ingest_duplicate_handling - Ensures duplicates are skipped
+    - test_get_review_stats_empty - Stats with zero reviews
+    - test_get_review_stats_with_reviews - Accurate average and distribution
+    - test_categorize_reviews_batch_no_pending - Handles empty queue
+    - test_categorize_reviews_batch_with_mock - LLM categorization (mocked)
+    - test_get_aggregate_summary_no_data - Default response when no data
+    - test_get_aggregate_summary_with_data - Returns categorized insights
+  - **Edge Case Tests (3 tests)**
+    - test_invalid_json_handling - Pydantic validation for malformed data
+    - test_invalid_rating_range - Rejects ratings outside 1-5
+    - test_review_stats_distribution_accuracy - Precise distribution calculation
+  - **Integration Tests (3 tests)**
+    - test_ingest_reviews_api - API endpoint integration
+    - test_review_pagination - Multi-page navigation
+    - test_batch_processing_multiple_batches - Handles 60 reviews in 3 batches
+- [x] All tests use mocked LLM calls for deterministic results
+- [x] Tests follow existing codebase patterns (async, fixtures, realistic scenarios)
+- [x] All 14 tests passing in <1 second
+- [x] Test execution: `pytest tests/test_reviews.py -v`
 ### Phase 2: Waiter Intelligence System
 - [x] `WaiterInsights` model for storing LLM-generated analysis
 - [x] `MetricsAggregator` service - computes 30-day rolling metrics

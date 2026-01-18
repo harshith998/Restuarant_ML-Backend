@@ -31,6 +31,7 @@ from app.models import (  # noqa: F401
     CameraSource,
     CameraCropState,
     CropDispatchLog,
+    Review,
     # Scheduling models
     StaffAvailability,
     StaffPreference,
@@ -154,6 +155,7 @@ from app.api import (
     waitlist_router,
     visits_router,
     routing_router,
+    reviews_router,
     waiter_dashboard_router,
     scheduling_router,
     analytics_router,
@@ -169,6 +171,7 @@ app.include_router(shifts_router)
 app.include_router(waitlist_router)
 app.include_router(visits_router)
 app.include_router(routing_router)
+app.include_router(reviews_router)
 app.include_router(waiter_dashboard_router)
 app.include_router(scheduling_router)
 app.include_router(analytics_router)
