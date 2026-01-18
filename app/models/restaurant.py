@@ -69,6 +69,7 @@ class Restaurant(Base):
     )
     reviews: Mapped[List["Review"]] = relationship(
         "Review", back_populates="restaurant", cascade="all, delete-orphan"
+    )
     ingredients: Mapped[List["Ingredient"]] = relationship(
         "Ingredient", back_populates="restaurant", cascade="all, delete-orphan"
     )
