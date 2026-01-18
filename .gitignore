@@ -31,6 +31,20 @@ venv/
 ENV/
 env/
 .venv/
+.venv*/
+
+# Video files
+*.mp4
+*.avi
+*.mov
+*.mkv
+
+# Test outputs
+test_videos/
+scripts/test_videos/
+
+# Uploads directory
+uploads/
 
 # IDE
 .idea/

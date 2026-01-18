@@ -82,6 +82,14 @@ from app.schemas.scheduling import (
     # Bulk schemas
     BulkAvailabilityCreate,
 )
+from app.schemas.video import (
+    VideoUploadResponse,
+    VideoJobResponse,
+    FrameListResponse,
+    VideoProcessRequest,
+    VideoProcessResponse,
+    VideoResultsResponse,
+)
 
 __all__ = [
     "RestaurantCreate", "RestaurantRead", "RestaurantUpdate",
@@ -157,4 +165,7 @@ __all__ = [
     "SchedulePerformanceResponse",
     "ScheduleInsightsRead",
     "ColdStartAnalyticsResponse",
+    # Video schemas
+    "VideoUploadResponse", "VideoJobResponse", "FrameListResponse",
+    "VideoProcessRequest", "VideoProcessResponse", "VideoResultsResponse",
 ]
