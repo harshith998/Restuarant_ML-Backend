@@ -23,6 +23,7 @@ from app.models.analytics import ScheduleInsights
 from app.models.ingredient import Ingredient
 from app.models.recipe import Recipe
 from app.models.kitchen_station import KitchenStation
+from app.models.video import VideoJob, ExtractedFrame, FrameClassification
 
 __all__ = [
     "Restaurant",
@@ -55,5 +56,9 @@ __all__ = [
     "ScheduleInsights",
     "Ingredient",
     "Recipe",
-    "KitchenStation"
+    "KitchenStation",
+    # Video models
+    "VideoJob",
+    "ExtractedFrame",
+    "FrameClassification",
 ]
