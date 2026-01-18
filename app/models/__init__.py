@@ -8,6 +8,7 @@ from app.models.visit import Visit
 from app.models.menu import MenuItem, OrderItem
 from app.models.metrics import WaiterMetrics, RestaurantMetrics, MenuItemMetrics, TableStateLog
 from app.models.crop import CameraSource, CameraCropState, CropDispatchLog
+from app.models.review import Review
 from app.models.insights import WaiterInsights
 from app.models.scheduling import (
     StaffAvailability,
@@ -40,6 +41,7 @@ __all__ = [
     "CameraSource",
     "CameraCropState",
     "CropDispatchLog",
+    "Review",
     "WaiterInsights",
     # Scheduling models
     "StaffAvailability",
