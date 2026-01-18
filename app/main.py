@@ -45,6 +45,10 @@ from app.models import (  # noqa: F401
     Ingredient,
     Recipe,
     KitchenStation,
+    # Video models
+    VideoJob,
+    ExtractedFrame,
+    FrameClassification,
 )
 
 # ML services (optional - only load if ML is enabled)
@@ -113,23 +117,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Configure CORS (needed for browser preflight requests)
-if settings.is_development:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=False,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-else:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_origins_list,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+# CORS - allow everything from everywhere
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/healthz")
 async def health_check() -> dict:
@@ -169,6 +164,7 @@ from app.api import (
     waiter_dashboard_router,
     scheduling_router,
     analytics_router,
+    video_router,
 )
 from app.api.menu_analytics import router as menu_analytics_router
 from app.api.inventory import router as inventory_router
@@ -189,4 +185,12 @@ app.include_router(analytics_router)
 app.include_router(menu_analytics_router)
 app.include_router(inventory_router)
 app.include_router(kitchen_routing_router)
+app.include_router(video_router)
 
+# Mount static files for video frames
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
+
+uploads_dir = Path("uploads")
+uploads_dir.mkdir(exist_ok=True)
+app.mount("/static", StaticFiles(directory="uploads"), name="static")

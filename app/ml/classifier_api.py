@@ -3,20 +3,23 @@ FastAPI endpoints for ML table state classification.
 
 Provides /predict endpoint for classifying table images.
 Optionally updates table state in Postgres when table_id is provided.
+
+Supports two classifier backends:
+- DINO: DINOv3-based classifier with trained weights (default)
+- SAM3: SAM3-based segmentation classifier (set CLASSIFIER_BACKEND=sam3)
 """
 from __future__ import annotations
 
 import io
 import logging
 import os
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from PIL import Image
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ml.inference import TableClassifier
 from app.database import get_session
 from app.services.table_state import update_table_state
 
@@ -24,22 +27,47 @@ LOGGER = logging.getLogger("restaurant-ml")
 
 router = APIRouter(prefix="/ml", tags=["ml"])
 
+# Supported classifier backends
+BACKEND_DINO = "dino"
+BACKEND_SAM3 = "sam3"
+
 
 class ModelManager:
-    """Manages ML model lifecycle."""
+    """Manages ML model lifecycle with support for multiple backends."""
 
     def __init__(self) -> None:
-        self.classifier: TableClassifier | None = None
+        self.classifier = None
+        self.backend: str = None
 
-    def load(self, weights_path: str = None, device: str = None) -> None:
-        """Load the classifier model."""
-        if weights_path is None:
-            weights_path = os.getenv("WEIGHTS_PATH", "weights/dinov3_classifier.pt")
+    def load(self, weights_path: str = None, device: str = None, backend: str = None) -> None:
+        """
+        Load the classifier model.
+
+        Args:
+            weights_path: Path to weights (only used for DINO backend)
+            device: Device to run on (cuda, mps, cpu, or None for auto)
+            backend: Classifier backend ('dino' or 'sam3'). Auto-detected from env if None.
+        """
+        if backend is None:
+            backend = os.getenv("CLASSIFIER_BACKEND", BACKEND_DINO).lower()
+
         if device is None:
             device = os.getenv("MODEL_DEVICE")
 
-        LOGGER.info("Loading classifier from %s", weights_path)
-        self.classifier = TableClassifier(weights_path, device=device)
+        self.backend = backend
+
+        if backend == BACKEND_SAM3:
+            LOGGER.info("Loading SAM3 classifier backend")
+            from app.ml.sam3_classifier import SAM3Classifier
+            self.classifier = SAM3Classifier(device=device)
+        else:
+            # Default to DINO
+            LOGGER.info("Loading DINO classifier backend")
+            from app.ml.inference import TableClassifier
+            if weights_path is None:
+                weights_path = os.getenv("WEIGHTS_PATH", "weights/dinov3_classifier.pt")
+            LOGGER.info("Loading classifier from %s", weights_path)
+            self.classifier = TableClassifier(weights_path, device=device)
 
     def predict(self, image: Image.Image) -> Dict[str, object]:
         """Run prediction on an image."""
@@ -131,7 +159,14 @@ async def predict(
     return result
 
 
-def init_model(weights_path: str = None, device: str = None) -> None:
-    """Initialize the ML model (call during app startup)."""
-    model_manager.load(weights_path, device)
-    LOGGER.info("ML model loaded and ready.")
+def init_model(weights_path: str = None, device: str = None, backend: str = None) -> None:
+    """
+    Initialize the ML model (call during app startup).
+
+    Args:
+        weights_path: Path to weights (only used for DINO backend)
+        device: Device to run on (cuda, mps, cpu, or None for auto)
+        backend: Classifier backend ('dino' or 'sam3'). Auto-detected from env if None.
+    """
+    model_manager.load(weights_path, device, backend)
+    LOGGER.info("ML model loaded and ready (backend: %s).", model_manager.backend)
