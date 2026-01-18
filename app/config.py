@@ -62,9 +62,9 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.app_env == "production"
 
-    # Google AI (for chatbot)
-    google_api_key: str | None = None
-    gemini_model: str = "gemini-3-flash"
+    # Chatbot (via OpenRouter)
+    openrouter_api_key: str = ""
+    gemini_model: str = "google/gemini-2.0-flash-001"
 
 
 @lru_cache
