@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import String, Integer, Float, Boolean, Text, ForeignKey, DateTime, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -37,10 +37,10 @@ class Review(Base):
     review_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
     # LLM-generated insights (populated after categorization)
-    sentiment_score: Mapped[float | None] = mapped_column(Float, nullable=True)  # -1.0 to 1.0
-    category_opinions: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    sentiment_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # -1.0 to 1.0
+    category_opinions: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     # Example: {"food": "Exceptional quality...", "service": "Slow and inattentive..."}
-    overall_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    overall_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     needs_attention: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Processing status

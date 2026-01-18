@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
+import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -66,6 +67,17 @@ async def init_db() -> None:
     """Initialize database tables (for development/testing)."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_ensure_restaurants_columns)
+
+
+def _ensure_restaurants_columns(conn: sa.Connection) -> None:
+    """Backfill missing columns on existing tables (dev safety net)."""
+    inspector = sa.inspect(conn)
+    if "restaurants" not in inspector.get_table_names():
+        return
+    existing_columns = {col["name"] for col in inspector.get_columns("restaurants")}
+    if "yelp_url" not in existing_columns:
+        conn.execute(sa.text("ALTER TABLE restaurants ADD COLUMN yelp_url VARCHAR(500)"))
 
 
 async def close_db() -> None:

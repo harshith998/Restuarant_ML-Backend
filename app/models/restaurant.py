@@ -35,7 +35,7 @@ class Restaurant(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     timezone: Mapped[str] = mapped_column(String(50), default="America/New_York")
-    yelp_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    yelp_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     config: Mapped[Dict[str, Any]] = mapped_column(JSON, default=lambda: {})
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
