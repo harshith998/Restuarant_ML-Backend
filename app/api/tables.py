@@ -15,6 +15,7 @@ from app.models.table import Table
 from app.models.section import Section
 from app.schemas.table import TableCreate, TableRead, TableUpdate, TableStateUpdate
 from app.services.table_service import TableService
+from app.services.restaurant_resolver import resolve_restaurant_id
 from app.services.table_state import update_table_state, get_table_state_history
 
 router = APIRouter(prefix="/api/v1", tags=["tables"])
@@ -22,7 +23,7 @@ router = APIRouter(prefix="/api/v1", tags=["tables"])
 
 @router.get("/restaurants/{restaurant_id}/tables", response_model=List[TableRead])
 async def list_tables(
-    restaurant_id: UUID,
+    restaurant_id: str,
     state: Optional[str] = Query(None, description="Filter by state (clean, occupied, dirty)"),
     section_id: Optional[UUID] = Query(None, description="Filter by section"),
     include_inactive: bool = Query(False, description="Include inactive tables"),
@@ -33,7 +34,12 @@ async def list_tables(
 
     Optionally filter by state or section.
     """
-    stmt = select(Table).where(Table.restaurant_id == restaurant_id)
+    try:
+        resolved_restaurant_id = await resolve_restaurant_id(restaurant_id, session)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    stmt = select(Table).where(Table.restaurant_id == resolved_restaurant_id)
     if state:
         stmt = stmt.where(Table.state == state)
     if section_id:
@@ -50,7 +56,7 @@ async def list_tables(
 
 @router.get("/restaurants/{restaurant_id}/tables/section-view", response_model=List[dict])
 async def get_section_view(
-    restaurant_id: UUID,
+    restaurant_id: str,
     session: AsyncSession = Depends(get_session),
 ) -> List[dict]:
     """
@@ -58,8 +64,13 @@ async def get_section_view(
 
     Includes section names and visit info for occupied tables.
     """
+    try:
+        resolved_restaurant_id = await resolve_restaurant_id(restaurant_id, session)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
     service = TableService(session)
-    return await service.get_floor_status(restaurant_id)
+    return await service.get_floor_status(resolved_restaurant_id)
 
 
 @router.get("/tables/{table_id}", response_model=TableRead)

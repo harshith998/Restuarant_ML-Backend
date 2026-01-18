@@ -303,6 +303,14 @@ class RoutingService:
 
         Creates Visit, updates Table state, updates Shift stats.
         """
+        table = await self.table_service.get_table_by_id(table_id)
+        if table is None:
+            raise ValueError(f"Table {table_id} not found")
+        if table.capacity < party_size:
+            raise ValueError(
+                f"Party size {party_size} exceeds table capacity {table.capacity}"
+            )
+
         # Get waiter's active shift
         shift = await self.waiter_service.get_active_shift_for_waiter(waiter_id)
         if shift is None:
