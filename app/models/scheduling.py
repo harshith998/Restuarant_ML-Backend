@@ -210,6 +210,9 @@ class Schedule(Base):
         UUID(as_uuid=True), ForeignKey("schedule_runs.id"), nullable=True
     )
 
+    # AI-generated summary explanation of the schedule
+    schedule_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     published_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -287,7 +290,8 @@ class ScheduleItem(Base):
     waiter: Mapped["Waiter"] = relationship("Waiter", back_populates="schedule_items")
     section: Mapped[Optional["Section"]] = relationship("Section")
     reasoning: Mapped[Optional["ScheduleReasoning"]] = relationship(
-        "ScheduleReasoning", back_populates="schedule_item", uselist=False
+        "ScheduleReasoning", back_populates="schedule_item", uselist=False,
+        cascade="all, delete-orphan"
     )
 
     @property

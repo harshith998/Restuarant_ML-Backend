@@ -151,10 +151,7 @@ async def recalculate_restaurant_tiers(
 
     Note: LLM scoring requires the call_llm function to be configured.
     """
-    job = TierRecalculationJob(
-        session=session,
-        call_llm_func=None,  # Will use fallback scoring
-    )
+    job = TierRecalculationJob(session=session)
 
     result = await job.run(
         restaurant_id=restaurant_id,
@@ -182,10 +179,7 @@ async def recalculate_waiter_tier(
 
     Useful for on-demand refresh after significant performance changes.
     """
-    job = TierRecalculationJob(
-        session=session,
-        call_llm_func=None,  # Will use fallback scoring
-    )
+    job = TierRecalculationJob(session=session)
 
     result = await job.run_for_waiter(
         waiter_id=waiter_id,

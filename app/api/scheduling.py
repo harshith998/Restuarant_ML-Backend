@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
-from typing import List, Optional
+from datetime import date, datetime, timedelta
+from typing import List, Optional, Union
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Path, Body
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_session
 from app.models import (
+    Restaurant,
     Waiter,
     StaffAvailability,
     StaffPreference,
@@ -36,15 +37,20 @@ from app.schemas.scheduling import (
     ScheduleCreate,
     ScheduleRead,
     ScheduleUpdate,
+    ScheduleSummaryUpdate,
     ScheduleWithItemsRead,
+    ScheduleWithItemsAndReasoningRead,
     ScheduleStatus,
     # ScheduleItem
     ScheduleItemCreate,
     ScheduleItemRead,
     ScheduleItemUpdate,
+    ScheduleItemWithReasoningRead,
     # ScheduleRun
     ScheduleRunCreate,
     ScheduleRunRead,
+    # Reasoning
+    ScheduleReasoningRead,
     # Audit
     ScheduleAuditEntry,
     ScheduleAuditResponse,
@@ -55,6 +61,24 @@ from app.schemas.scheduling import (
 )
 
 router = APIRouter(prefix="/api/v1", tags=["scheduling"])
+
+
+async def _resolve_restaurant_id(
+    restaurant_id: str,
+    session: AsyncSession,
+) -> UUID:
+    """Resolve 'default' to the first restaurant's UUID, or validate the UUID."""
+    if restaurant_id == "default":
+        result = await session.execute(select(Restaurant).order_by(Restaurant.id).limit(1))
+        restaurant = result.scalar_one_or_none()
+        if not restaurant:
+            raise HTTPException(status_code=404, detail="No restaurants found")
+        return restaurant.id
+
+    try:
+        return UUID(restaurant_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid restaurant_id format")
 
 
 # =============================================================================
@@ -300,29 +324,34 @@ async def upsert_staff_preferences(
 
 @router.get(
     "/restaurants/{restaurant_id}/schedules",
-    response_model=List[ScheduleRead],
+    response_model=List[ScheduleWithItemsAndReasoningRead],
     summary="List schedules for restaurant",
 )
 async def list_schedules(
-    restaurant_id: UUID,
+    restaurant_id: str = Path(..., description="Restaurant UUID or 'default'"),
     week_start: Optional[date] = Query(None, description="Filter by week start date"),
     status: Optional[ScheduleStatus] = Query(None, description="Filter by status"),
     limit: int = Query(10, ge=1, le=50),
     session: AsyncSession = Depends(get_session),
-) -> List[ScheduleRead]:
-    """List schedules for a restaurant."""
-    stmt = select(Schedule).where(Schedule.restaurant_id == restaurant_id)
+) -> List[ScheduleWithItemsAndReasoningRead]:
+    """List schedules for a restaurant with items and AI reasoning."""
+    resolved_id = await _resolve_restaurant_id(restaurant_id, session)
+    stmt = select(Schedule).where(Schedule.restaurant_id == resolved_id)
 
     if week_start:
         stmt = stmt.where(Schedule.week_start_date == week_start)
     if status:
         stmt = stmt.where(Schedule.status == status.value)
 
+    # Eager load items AND reasoning so they're included in the response
+    stmt = stmt.options(
+        selectinload(Schedule.items).selectinload(ScheduleItem.reasoning)
+    )
     stmt = stmt.order_by(Schedule.week_start_date.desc(), Schedule.version.desc()).limit(limit)
 
     result = await session.execute(stmt)
     schedules = result.scalars().all()
-    return [ScheduleRead.model_validate(s) for s in schedules]
+    return [ScheduleWithItemsAndReasoningRead.model_validate(s) for s in schedules]
 
 
 @router.post(
@@ -332,15 +361,16 @@ async def list_schedules(
     summary="Create a new schedule",
 )
 async def create_schedule(
-    restaurant_id: UUID,
-    data: ScheduleCreate,
+    restaurant_id: str = Path(..., description="Restaurant UUID or 'default'"),
+    data: ScheduleCreate = None,
     session: AsyncSession = Depends(get_session),
 ) -> ScheduleRead:
     """Create a new schedule for a restaurant."""
+    resolved_id = await _resolve_restaurant_id(restaurant_id, session)
     # Check for existing schedule for this week
     stmt = select(Schedule).where(
         and_(
-            Schedule.restaurant_id == restaurant_id,
+            Schedule.restaurant_id == resolved_id,
             Schedule.week_start_date == data.week_start_date,
             Schedule.status != "archived",
         )
@@ -355,7 +385,7 @@ async def create_schedule(
         )
 
     schedule = Schedule(
-        restaurant_id=restaurant_id,
+        restaurant_id=resolved_id,
         week_start_date=data.week_start_date,
         status="draft",
         generated_by=data.generated_by.value,
@@ -369,18 +399,20 @@ async def create_schedule(
 
 @router.get(
     "/schedules/{schedule_id}",
-    response_model=ScheduleWithItemsRead,
-    summary="Get schedule with items",
+    response_model=ScheduleWithItemsAndReasoningRead,
+    summary="Get schedule with items and AI reasoning",
 )
 async def get_schedule(
     schedule_id: UUID,
     session: AsyncSession = Depends(get_session),
-) -> ScheduleWithItemsRead:
-    """Get a schedule with all its items."""
+) -> ScheduleWithItemsAndReasoningRead:
+    """Get a schedule with all its items and AI reasoning for each assignment."""
     stmt = (
         select(Schedule)
         .where(Schedule.id == schedule_id)
-        .options(selectinload(Schedule.items))
+        .options(
+            selectinload(Schedule.items).selectinload(ScheduleItem.reasoning)
+        )
     )
     result = await session.execute(stmt)
     schedule = result.scalar_one_or_none()
@@ -388,7 +420,7 @@ async def get_schedule(
     if not schedule:
         raise HTTPException(status_code=404, detail="Schedule not found")
 
-    return ScheduleWithItemsRead.model_validate(schedule)
+    return ScheduleWithItemsAndReasoningRead.model_validate(schedule)
 
 
 @router.patch(
@@ -418,6 +450,43 @@ async def update_schedule(
     await session.commit()
     await session.refresh(schedule)
     return ScheduleRead.model_validate(schedule)
+
+
+@router.delete(
+    "/schedules/{schedule_id}",
+    status_code=204,
+    summary="Delete a schedule",
+)
+async def delete_schedule(
+    schedule_id: UUID,
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """
+    Delete a schedule and all its items.
+
+    Only allows deleting draft schedules. Published schedules must be
+    archived instead.
+    """
+    schedule = await session.get(Schedule, schedule_id)
+
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+
+    if schedule.status == "published":
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot delete published schedule. Archive it instead.",
+        )
+
+    # Delete all schedule items first (or rely on cascade)
+    stmt = select(ScheduleItem).where(ScheduleItem.schedule_id == schedule_id)
+    result = await session.execute(stmt)
+    items = result.scalars().all()
+    for item in items:
+        await session.delete(item)
+
+    await session.delete(schedule)
+    await session.commit()
 
 
 @router.post(
@@ -520,7 +589,7 @@ async def create_schedule_item(
         raise HTTPException(status_code=404, detail="Schedule not found")
 
     if schedule.status == "published":
-        raise HTTPException(status_code=400, detail="Cannot modify a published schedule")
+        raise HTTPException(status_code=409, detail="Cannot modify a published schedule")
 
     # Verify waiter exists and belongs to same restaurant
     waiter = await session.get(Waiter, data.waiter_id)
@@ -537,7 +606,7 @@ async def create_schedule_item(
         shift_date=data.shift_date,
         shift_start=data.shift_start,
         shift_end=data.shift_end,
-        source=data.source.value,
+        source="manual",
     )
     session.add(item)
     await session.commit()
@@ -563,13 +632,30 @@ async def update_schedule_item(
     # Check if schedule is published
     schedule = await session.get(Schedule, item.schedule_id)
     if schedule and schedule.status == "published":
-        raise HTTPException(status_code=400, detail="Cannot modify items in a published schedule")
+        raise HTTPException(status_code=409, detail="Cannot modify items in a published schedule")
 
     update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         if field == "role" and value is not None:
             value = value.value
+        if field == "waiter_id" and value is not None:
+            waiter = await session.get(Waiter, value)
+            if not waiter:
+                raise HTTPException(status_code=404, detail="Staff member not found")
+            if schedule and waiter.restaurant_id != schedule.restaurant_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Staff member does not belong to this restaurant",
+                )
         setattr(item, field, value)
+
+    item.source = "manual"
+
+    # Clear any existing reasoning for manual edits
+    reasoning_stmt = select(ScheduleReasoning).where(ScheduleReasoning.schedule_item_id == item.id)
+    reasoning_result = await session.execute(reasoning_stmt)
+    for reasoning in reasoning_result.scalars().all():
+        await session.delete(reasoning)
 
     await session.commit()
     await session.refresh(item)
@@ -593,10 +679,51 @@ async def delete_schedule_item(
     # Check if schedule is published
     schedule = await session.get(Schedule, item.schedule_id)
     if schedule and schedule.status == "published":
-        raise HTTPException(status_code=400, detail="Cannot modify items in a published schedule")
+        raise HTTPException(status_code=409, detail="Cannot modify items in a published schedule")
 
     await session.delete(item)
     await session.commit()
+
+
+@router.patch(
+    "/schedules/{schedule_id}/summary",
+    response_model=ScheduleRead,
+    summary="Update schedule summary",
+)
+async def update_schedule_summary(
+    schedule_id: UUID,
+    data: ScheduleSummaryUpdate,
+    session: AsyncSession = Depends(get_session),
+) -> ScheduleRead:
+    """Update the AI-generated schedule summary."""
+    schedule = await session.get(Schedule, schedule_id)
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+
+    schedule.schedule_summary = data.schedule_summary
+    await session.commit()
+    await session.refresh(schedule)
+    return ScheduleRead.model_validate(schedule)
+
+
+@router.get(
+    "/schedule-items/{item_id}/reasoning",
+    response_model=ScheduleReasoningRead,
+    summary="Get AI reasoning for a shift assignment",
+)
+async def get_shift_reasoning(
+    item_id: UUID,
+    session: AsyncSession = Depends(get_session),
+) -> ScheduleReasoningRead:
+    """Get AI reasoning for why this shift was assigned to this staff member."""
+    stmt = select(ScheduleReasoning).where(ScheduleReasoning.schedule_item_id == item_id)
+    result = await session.execute(stmt)
+    reasoning = result.scalar_one_or_none()
+
+    if not reasoning:
+        raise HTTPException(status_code=404, detail="Reasoning not found for this shift")
+
+    return ScheduleReasoningRead.model_validate(reasoning)
 
 
 # =============================================================================
@@ -611,9 +738,10 @@ async def delete_schedule_item(
     summary="Trigger scheduling engine run",
 )
 async def create_schedule_run(
-    restaurant_id: UUID,
-    data: ScheduleRunCreate,
+    restaurant_id: str = Path(..., description="Restaurant UUID or 'default'"),
+    data: Optional[ScheduleRunCreate] = Body(None),
     run_engine: bool = Query(True, description="Whether to run the scheduling engine immediately"),
+    force_regenerate: bool = Query(False, description="Delete existing draft and regenerate"),
     session: AsyncSession = Depends(get_session),
 ) -> ScheduleRunRead:
     """Trigger a scheduling engine run for a week.
@@ -631,23 +759,65 @@ async def create_schedule_run(
     Args:
         run_engine: If True (default), runs the engine immediately.
                    If False, just creates the run record for manual processing.
+        force_regenerate: If True, deletes existing draft schedule before creating new one.
     """
+    resolved_id = await _resolve_restaurant_id(restaurant_id, session)
+
+    # Default week_start_date to next Monday when not provided
+    if data is None or data.week_start_date is None:
+        today = datetime.utcnow().date()
+        days_until_monday = (7 - today.weekday()) % 7
+        week_start_date = today + timedelta(days=days_until_monday)
+        data = ScheduleRunCreate(week_start_date=week_start_date)
+
+    # Check for existing schedules for this week
+    existing_stmt = select(Schedule).where(
+        and_(
+            Schedule.restaurant_id == resolved_id,
+            Schedule.week_start_date == data.week_start_date,
+        )
+    )
+    existing_result = await session.execute(existing_stmt)
+    existing_schedules = list(existing_result.scalars().all())
+
+    # Handle existing schedules - optionally delete drafts when force_regenerate is True
+    if existing_schedules and force_regenerate:
+        draft_schedules = [s for s in existing_schedules if s.status == "draft"]
+        for draft in draft_schedules:
+            # Delete items (reasoning cascades via ScheduleItem relationship)
+            items_stmt = select(ScheduleItem).where(ScheduleItem.schedule_id == draft.id)
+            items_result = await session.execute(items_stmt)
+            for item in items_result.scalars().all():
+                await session.delete(item)
+            await session.delete(draft)
+        await session.flush()
+
     if run_engine:
         # Run the scheduling engine
         from app.services.scheduling_engine import SchedulingEngine
 
-        engine = SchedulingEngine(session)
-        result = await engine.run(restaurant_id, data.week_start_date)
+        try:
+            engine = SchedulingEngine(session)
+            result = await engine.run(resolved_id, data.week_start_date)
+        except Exception as e:
+            # Return a failed run status instead of 500 error
+            raise HTTPException(
+                status_code=422,
+                detail=f"Schedule generation failed: {str(e)}",
+            )
 
-        # Return the run status
+        # Return the run status with schedule_id
         run = await session.get(ScheduleRun, result.schedule_run_id)
         if run:
-            return ScheduleRunRead.model_validate(run)
+            response = ScheduleRunRead.model_validate(run)
+            # Add the schedule_id from the engine result so frontend can fetch the schedule
+            response.schedule_id = result.schedule_id
+            return response
 
         # Fallback if run not found (shouldn't happen)
         return ScheduleRunRead(
             id=result.schedule_run_id,
-            restaurant_id=restaurant_id,
+            restaurant_id=resolved_id,
             week_start_date=data.week_start_date,
             engine_version="1.0.0",
             run_status=result.status,
@@ -658,11 +828,12 @@ async def create_schedule_run(
             },
             error_message=result.error_message,
             created_at=datetime.utcnow(),
+            schedule_id=result.schedule_id,
         )
     else:
         # Just create a pending run record
         run = ScheduleRun(
-            restaurant_id=restaurant_id,
+            restaurant_id=resolved_id,
             week_start_date=data.week_start_date,
             engine_version="1.0.0",
             run_status="pending",
@@ -701,14 +872,15 @@ async def get_schedule_run(
     summary="List staffing requirements",
 )
 async def list_staffing_requirements(
-    restaurant_id: UUID,
+    restaurant_id: str = Path(..., description="Restaurant UUID or 'default'"),
     day_of_week: Optional[int] = Query(None, ge=0, le=6, description="Filter by day (0=Mon, 6=Sun)"),
     role: Optional[str] = Query(None, description="Filter by role"),
     effective_date: Optional[date] = Query(None, description="Filter requirements effective on this date"),
     session: AsyncSession = Depends(get_session),
 ) -> List[StaffingRequirementsRead]:
     """Get all staffing requirements for a restaurant."""
-    stmt = select(StaffingRequirements).where(StaffingRequirements.restaurant_id == restaurant_id)
+    resolved_id = await _resolve_restaurant_id(restaurant_id, session)
+    stmt = select(StaffingRequirements).where(StaffingRequirements.restaurant_id == resolved_id)
 
     if day_of_week is not None:
         stmt = stmt.where(StaffingRequirements.day_of_week == day_of_week)
@@ -737,13 +909,14 @@ async def list_staffing_requirements(
     summary="Create staffing requirement",
 )
 async def create_staffing_requirement(
-    restaurant_id: UUID,
-    data: StaffingRequirementsCreate,
+    restaurant_id: str = Path(..., description="Restaurant UUID or 'default'"),
+    data: StaffingRequirementsCreate = None,
     session: AsyncSession = Depends(get_session),
 ) -> StaffingRequirementsRead:
     """Create a new staffing requirement for a time slot."""
+    resolved_id = await _resolve_restaurant_id(restaurant_id, session)
     requirement = StaffingRequirements(
-        restaurant_id=restaurant_id,
+        restaurant_id=resolved_id,
         day_of_week=data.day_of_week,
         start_time=data.start_time,
         end_time=data.end_time,

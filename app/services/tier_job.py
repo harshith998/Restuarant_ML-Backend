@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Callable, List, Optional
+from typing import List, Optional
 from uuid import UUID
 
 from sqlalchemy import select
@@ -56,24 +56,17 @@ class TierRecalculationJob:
     def __init__(
         self,
         session: AsyncSession,
-        call_llm_func: Optional[Callable] = None,
-        llm_model: Optional[str] = None,
     ):
         """
         Initialize the tier recalculation job.
 
         Args:
             session: Database session
-            call_llm_func: The call_llm function for LLM scoring
-            llm_model: Model to use for LLM scoring
         """
         self.session = session
         self.metrics_aggregator = MetricsAggregator(session)
         self.tier_calculator = TierCalculator()
-        self.llm_scorer = LLMScorer(
-            model=llm_model,
-            call_llm_func=call_llm_func,
-        )
+        self.llm_scorer = LLMScorer()
 
     async def run(
         self,

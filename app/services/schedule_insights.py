@@ -8,15 +8,13 @@ from datetime import date, datetime, time, timedelta
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.config import get_settings
 from app.models import Schedule, ScheduleInsights, ScheduleItem, Waiter
 from app.services.fairness_calculator import FairnessReport
-from app.services.llm_scorer import LLMResponseParser
+from app.services.llm_client import call_llm, LLMError
 from app.services.schedule_analytics import (
     CoverageMetrics,
     ScheduleAnalyticsService,
@@ -68,65 +66,20 @@ class ScheduleInsightsReport:
 
 
 # ============================================================================
-# LLM Helper Functions
+# LLM System Prompt
 # ============================================================================
 
+SCHEDULE_INSIGHTS_SYSTEM_PROMPT = """You are a restaurant scheduling analyst expert.
 
-async def call_llm(
-    prompt: str,
-    model: Optional[str] = None,
-    max_tokens: int = 1000,
-    temperature: float = 0.3,
-) -> str:
-    """
-    Call OpenRouter LLM API.
+Your task is to analyze schedule data and provide a brief, actionable summary for restaurant managers.
 
-    Args:
-        prompt: The prompt to send
-        model: Model identifier (defaults to settings.llm_model)
-        max_tokens: Maximum tokens in response
-        temperature: Sampling temperature
+Focus on:
+- Critical staffing issues that need immediate attention
+- Fairness concerns in hours distribution
+- Patterns that could affect staff wellbeing (like clopening)
+- Concrete recommendations
 
-    Returns:
-        Response text from the LLM
-    """
-    settings = get_settings()
-
-    if not settings.llm_enabled:
-        raise RuntimeError("LLM is disabled")
-
-    if not settings.llm_api_key:
-        raise RuntimeError("LLM API key not configured")
-
-    model = model or settings.llm_model
-
-    headers = {
-        "Authorization": f"Bearer {settings.llm_api_key}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://restaurant-intel.app",
-        "X-Title": "Restaurant Intelligence Platform",
-    }
-
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "user", "content": prompt}
-        ],
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-    }
-
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.post(
-            f"{settings.llm_api_base}/chat/completions",
-            headers=headers,
-            json=payload,
-        )
-        response.raise_for_status()
-        data = response.json()
-
-        # Extract content from OpenAI-compatible response
-        return data["choices"][0]["message"]["content"]
+Keep your response concise (2-3 sentences) and professional. Highlight the most important points first."""
 
 
 # ============================================================================
@@ -145,27 +98,17 @@ class ScheduleInsightsService:
     - Performance concerns
     """
 
-    DEFAULT_MODEL = "bytedance-seed/seed-1.6"
     CACHE_EXPIRY_HOURS = 24
     CLOPENING_MIN_HOURS = 10  # Minimum hours between shifts to avoid clopening
 
-    def __init__(
-        self,
-        session: AsyncSession,
-        call_llm_func: Optional[callable] = None,
-        model: Optional[str] = None,
-    ):
+    def __init__(self, session: AsyncSession):
         """
         Initialize insights service.
 
         Args:
             session: Database session
-            call_llm_func: Optional custom LLM function (for testing)
-            model: LLM model to use
         """
         self.session = session
-        self._call_llm = call_llm_func or call_llm
-        self.model = model or self.DEFAULT_MODEL
         self.analytics = ScheduleAnalyticsService(session)
 
     async def generate_insights(
@@ -496,27 +439,32 @@ class ScheduleInsightsService:
         Returns:
             Human-readable summary paragraph
         """
-        prompt = self._build_summary_prompt(report, coverage, fairness)
+        user_prompt = self._build_user_prompt(report, coverage, fairness)
 
         try:
-            response = await self._call_llm(
-                prompt=prompt,
-                model=self.model,
-                max_tokens=500,
+            response = await call_llm(
+                system_prompt=SCHEDULE_INSIGHTS_SYSTEM_PROMPT,
+                user_prompt=user_prompt,
                 temperature=0.5,
+                max_tokens=500,
+                response_format="json",
             )
-            return response.strip()
-        except Exception as e:
+            # Extract summary from JSON response
+            return response.get("summary", self._generate_fallback_summary(report))
+        except LLMError as e:
             logger.error(f"LLM call failed: {e}")
             return self._generate_fallback_summary(report)
+        except Exception as e:
+            logger.error(f"LLM call failed unexpectedly: {e}")
+            return self._generate_fallback_summary(report)
 
-    def _build_summary_prompt(
+    def _build_user_prompt(
         self,
         report: ScheduleInsightsReport,
         coverage: CoverageMetrics,
         fairness: FairnessReport,
     ) -> str:
-        """Build prompt for LLM summary generation."""
+        """Build user prompt with schedule data for LLM analysis."""
         insights_text = []
 
         for insight in report.coverage_insights[:3]:
@@ -528,18 +476,18 @@ class ScheduleInsightsService:
         for insight in report.pattern_insights[:3]:
             insights_text.append(f"- [{insight.severity.upper()}] {insight.message}")
 
-        prompt = f"""You are a restaurant scheduling analyst. Summarize the following schedule insights in 2-3 sentences for a manager.
+        prompt = f"""Analyze this schedule data:
 
 Schedule for week of {report.week_start}:
 - Coverage: {coverage.coverage_pct}%
-- Fairness (Gini): {fairness.gini_coefficient:.2f}
+- Fairness (Gini coefficient): {fairness.gini_coefficient:.2f}
 - Critical issues: {report.critical_count}
 - Warnings: {report.warning_count}
 
 Key insights:
 {chr(10).join(insights_text) if insights_text else "No significant issues detected."}
 
-Provide a brief, actionable summary that highlights the most important points. Be concise and direct."""
+Respond with JSON: {{"summary": "<your 2-3 sentence summary>"}}"""
 
         return prompt
 
