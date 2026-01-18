@@ -17,9 +17,32 @@ import httpx
 logger = logging.getLogger(__name__)
 
 # OpenRouter Configuration
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "bytedance-seed/seed-1.6")
 OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
+
+
+from typing import Optional
+
+
+def get_api_key() -> Optional[str]:
+    """Get API key at runtime (allows for late .env loading)."""
+    # Try env var first, then fall back to settings
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        # Import here to avoid circular imports
+        from app.config import get_settings
+        settings = get_settings()
+        api_key = settings.openrouter_api_key or settings.llm_api_key
+    return api_key
+
+
+def get_model() -> str:
+    """Get model at runtime."""
+    model = os.getenv("OPENROUTER_MODEL")
+    if not model:
+        from app.config import get_settings
+        settings = get_settings()
+        model = settings.openrouter_model or settings.llm_model
+    return model or "google/gemini-3-flash-preview"
 
 # Request settings
 DEFAULT_TIMEOUT = 30.0  # seconds
@@ -87,8 +110,12 @@ async def call_llm(
         ... )
         >>> print(result["message"])
     """
+    # Get API key and model at runtime
+    api_key = get_api_key()
+    model = get_model()
+
     # Validate API key
-    if not OPENROUTER_API_KEY:
+    if not api_key:
         raise LLMAuthError(
             "OPENROUTER_API_KEY not set in environment variables. "
             "Please add it to your .env file."
@@ -96,7 +123,7 @@ async def call_llm(
 
     # Prepare request payload
     payload = {
-        "model": OPENROUTER_MODEL,
+        "model": model,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
@@ -110,7 +137,7 @@ async def call_llm(
         payload["response_format"] = {"type": "json_object"}
 
     headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
         "HTTP-Referer": "https://github.com/restaurant-intel",  # Optional: for OpenRouter analytics
         "X-Title": "Restaurant Intelligence Platform",  # Optional: for OpenRouter analytics
@@ -123,7 +150,7 @@ async def call_llm(
         try:
             logger.info(
                 f"LLM API call attempt {attempt + 1}/{RETRY_ATTEMPTS} "
-                f"(model: {OPENROUTER_MODEL}, temp: {temperature})"
+                f"(model: {model}, temp: {temperature})"
             )
 
             async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:

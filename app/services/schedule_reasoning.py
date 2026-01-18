@@ -14,6 +14,20 @@ from app.services.scheduling_constraints import (
     ShiftAssignment,
     StaffingRequirement,
 )
+from app.services.llm_client import call_llm, LLMError
+
+
+# System prompt for schedule reasoning
+SCHEDULE_REASONING_SYSTEM_PROMPT = """You are a restaurant scheduling assistant.
+
+Your task is to explain why a particular staff member was assigned to a shift.
+
+Provide a brief, professional summary (1-2 sentences) that explains the assignment choice based on:
+- Staff availability and preferences
+- Fairness in scheduling
+- Coverage requirements
+
+Be clear and helpful for managers reviewing schedules."""
 
 logger = logging.getLogger(__name__)
 
@@ -63,18 +77,11 @@ class ScheduleReasoningGenerator:
 
     DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
-    def __init__(self, call_llm_func: Optional[callable] = None, model: Optional[str] = None):
-        """
-        Initialize reasoning generator.
+    def __init__(self):
+        """Initialize reasoning generator."""
+        pass
 
-        Args:
-            call_llm_func: Optional LLM function for enhanced explanations
-            model: Model identifier for LLM
-        """
-        self._call_llm = call_llm_func
-        self.model = model or "bytedance-seed/seed-1.6"
-
-    def generate_reasoning(
+    async def generate_reasoning(
         self,
         staff: StaffContext,
         assignment: ShiftAssignment,
@@ -117,9 +124,9 @@ class ScheduleReasoningGenerator:
         reasoning.confidence_score = self._calculate_confidence(reasoning, score_breakdown)
 
         # Optionally enhance with LLM
-        if use_llm and self._call_llm:
+        if use_llm:
             try:
-                self._enhance_with_llm(reasoning, staff, assignment, requirement)
+                await self._enhance_with_llm(reasoning, staff, assignment, requirement)
             except Exception as e:
                 logger.warning(f"LLM enhancement failed: {e}")
 
@@ -335,43 +342,40 @@ class ScheduleReasoningGenerator:
         requirement: Optional[StaffingRequirement],
     ) -> None:
         """Enhance reasoning with LLM-generated explanations."""
-        prompt = self._build_llm_prompt(reasoning, staff, assignment, requirement)
+        user_prompt = self._build_user_prompt(reasoning, staff, assignment, requirement)
 
         try:
-            response = await self._call_llm(
-                model=self.model,
-                prompt=prompt,
-                max_tokens=500,
+            response = await call_llm(
+                system_prompt=SCHEDULE_REASONING_SYSTEM_PROMPT,
+                user_prompt=user_prompt,
                 temperature=0.3,
+                max_tokens=500,
+                response_format="json",
             )
 
-            reasoning.raw_response = response
+            reasoning.raw_response = json.dumps(response)
             reasoning.llm_enhanced = True
 
-            # Try to parse enhanced summary
-            if response:
-                # Look for a summary in the response
-                lines = response.strip().split('\n')
-                for line in lines:
-                    line = line.strip()
-                    if len(line) > 30 and not line.startswith('{'):
-                        reasoning.summary = line[:500]
-                        break
+            # Extract summary from JSON response
+            if "summary" in response:
+                reasoning.summary = response["summary"][:500]
 
-        except Exception as e:
+        except LLMError as e:
             logger.warning(f"LLM enhancement failed: {e}")
+        except Exception as e:
+            logger.warning(f"LLM enhancement failed unexpectedly: {e}")
 
-    def _build_llm_prompt(
+    def _build_user_prompt(
         self,
         reasoning: AssignmentReasoning,
         staff: StaffContext,
         assignment: ShiftAssignment,
         requirement: Optional[StaffingRequirement],
     ) -> str:
-        """Build prompt for LLM enhancement."""
+        """Build user prompt for LLM enhancement."""
         day_name = self.DAY_NAMES[assignment.shift_date.weekday()]
 
-        return f"""Summarize why this schedule assignment is a good choice in 1-2 sentences.
+        return f"""Explain why this schedule assignment is a good choice:
 
 Staff: {staff.name}
 Shift: {day_name}, {assignment.shift_start.strftime('%I:%M %p')} - {assignment.shift_end.strftime('%I:%M %p')}
@@ -383,7 +387,7 @@ Reasons identified:
 Preference matches: {', '.join(reasoning.preference_matches) if reasoning.preference_matches else 'None'}
 Concerns: {', '.join(reasoning.constraint_violations) if reasoning.constraint_violations else 'None'}
 
-Write a brief, professional summary explaining this assignment choice."""
+Respond with JSON: {{"summary": "<your 1-2 sentence explanation>"}}"""
 
     def _get_shift_type(self, start_time: time) -> str:
         """Determine shift type based on start time."""

@@ -14,7 +14,7 @@ from app.api.analytics import router as analytics_router
 from app.api.menu_analytics import router as menu_analytics_router
 from app.api.inventory import router as inventory_router
 from app.api.kitchen_routing import router as kitchen_routing_router
-
+from app.api.video import router as video_router
 
 __all__ = [
     "restaurants_router",
@@ -32,4 +32,5 @@ __all__ = [
     "menu_analytics_router",
     "inventory_router",
     "kitchen_routing_router",
+    "video_router",
 ]

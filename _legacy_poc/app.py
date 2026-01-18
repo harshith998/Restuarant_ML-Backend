@@ -1,7 +1,7 @@
 import io
 import logging
 import os
-from typing import Dict
+from typing import Dict, Optional
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from PIL import Image
@@ -14,7 +14,7 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 
 class ModelManager:
     def __init__(self) -> None:
-        self.classifier: TableClassifier | None = None
+        self.classifier: Optional[TableClassifier] = None
 
     def load(self) -> None:
         weights_path = os.getenv("WEIGHTS_PATH", "/app/weights/dinov3_classifier.pt")

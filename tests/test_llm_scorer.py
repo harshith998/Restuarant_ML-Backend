@@ -168,7 +168,7 @@ class TestLLMScorerFallback:
         from datetime import date
         from uuid import uuid4
 
-        scorer = LLMScorer(call_llm_func=None)
+        scorer = LLMScorer()
 
         metrics = WaiterMetricsSnapshot(
             waiter_id=uuid4(),
@@ -197,7 +197,7 @@ class TestLLMScorerFallback:
         from datetime import date
         from uuid import uuid4
 
-        scorer = LLMScorer(call_llm_func=None)
+        scorer = LLMScorer()
 
         metrics = WaiterMetricsSnapshot(
             waiter_id=uuid4(),

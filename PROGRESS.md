@@ -1,5 +1,41 @@
 # Progress Tracking
 
+## Quick Start
+
+```bash
+# 1. Start PostgreSQL database
+docker-compose up -d db
+
+# 2. Create virtual environment (first time only)
+python3 -m venv .venv
+
+# 3. Activate virtual environment
+source .venv/bin/activate
+
+# 4. Install dependencies
+pip install -r requirements.txt
+
+# 5. Copy environment file (first time only)
+cp .env.example .env
+
+# 6. Run database migrations
+alembic upgrade head
+
+# 7. Start the server
+uvicorn app.main:app --reload
+
+# Server runs at http://localhost:8000
+# API docs at http://localhost:8000/docs
+# Health check at http://localhost:8000/healthz
+```
+
+**With ML enabled:**
+```bash
+ML_ENABLED=true uvicorn app.main:app --reload
+```
+
+---
+
 ## Current Phase
 Phase 1: PostgreSQL Schema + Core Models - **COMPLETE**
 Phase 2: Waiter Intelligence System - **COMPLETE**

@@ -41,9 +41,11 @@ class Settings(BaseSettings):
 
     # LLM Settings (OpenRouter)
     llm_enabled: bool = True
-    llm_model: str = "bytedance-seed/seed-1.6"
+    llm_model: str = "google/gemini-3-flash-preview"
     llm_api_base: str = "https://openrouter.ai/api/v1"
     llm_api_key: str = ""  # Set via OPENROUTER_API_KEY env var
+    openrouter_api_key: str = ""  # Alias for llm_api_key
+    openrouter_model: str = "google/gemini-3-flash-preview"
 
     # Tier Calculation Settings
     tier_lookback_days: int = 30
