@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
@@ -25,6 +26,7 @@ from app.schemas.review import (
     ReviewSummary,
 )
 from app.services import review_categorization, review_ingestion, review_stats, review_summary
+from app.services.review_resolver import resolve_reviews_restaurant_id
 
 logger = logging.getLogger(__name__)
 
@@ -85,14 +87,49 @@ async def ingest_reviews(
             status_code=400, detail=f"Invalid review data format: {str(e)}"
         )
 
+    resolved_id = resolve_reviews_restaurant_id(str(restaurant_id))
+
     # Ingest reviews
-    added = await review_ingestion.bulk_ingest(restaurant_id, reviews, session)
+    added = await review_ingestion.bulk_ingest(resolved_id, reviews, session)
 
     # Note: Background categorization skipped for now to avoid async task issues
     # In production, use a proper task queue like Celery or arq
     # if background_tasks and added > 0:
     #     background_tasks.add_task(_background_categorization, restaurant_id)
 
+    return IngestResponse(
+        added=added,
+        total_submitted=len(reviews),
+        status="pending_categorization" if added > 0 else "no_new_reviews",
+    )
+
+
+@router.post("/{restaurant_id}/seed", response_model=IngestResponse)
+async def seed_reviews(
+    restaurant_id: UUID,
+    session: AsyncSession = Depends(get_session),
+) -> IngestResponse:
+    """
+    Seed reviews for quick local testing using the bundled test_reviews.json.
+    """
+    seed_path = Path(__file__).resolve().parents[2] / "test_reviews.json"
+    if not seed_path.exists():
+        raise HTTPException(status_code=500, detail="Seed file not found")
+
+    try:
+        reviews_data = json.loads(seed_path.read_text())
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="Seed file is invalid JSON")
+
+    try:
+        reviews = [ReviewCreate(**r) for r in reviews_data]
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Seed file has invalid review data: {str(e)}"
+        )
+
+    resolved_id = resolve_reviews_restaurant_id(str(restaurant_id))
+    added = await review_ingestion.bulk_ingest(resolved_id, reviews, session)
     return IngestResponse(
         added=added,
         total_submitted=len(reviews),
@@ -118,7 +155,8 @@ async def get_stats(
     Example:
         curl http://localhost:8000/api/v1/reviews/{restaurant_id}/stats
     """
-    return await review_stats.get_review_stats(restaurant_id, session)
+    resolved_id = resolve_reviews_restaurant_id(str(restaurant_id))
+    return await review_stats.get_review_stats(resolved_id, session)
 
 
 @router.get("/{restaurant_id}/summary", response_model=ReviewSummary)
@@ -139,7 +177,8 @@ async def get_summary(
     Example:
         curl http://localhost:8000/api/v1/reviews/{restaurant_id}/summary
     """
-    return await review_summary.get_aggregate_summary(restaurant_id, session)
+    resolved_id = resolve_reviews_restaurant_id(str(restaurant_id))
+    return await review_summary.get_aggregate_summary(resolved_id, session)
 
 
 @router.get("/{restaurant_id}/reviews", response_model=list[ReviewRead])
@@ -163,9 +202,10 @@ async def get_reviews(
     Example:
         curl "http://localhost:8000/api/v1/reviews/{restaurant_id}/reviews?limit=10"
     """
+    resolved_id = resolve_reviews_restaurant_id(str(restaurant_id))
     stmt = (
         select(Review)
-        .where(Review.restaurant_id == restaurant_id)
+        .where(Review.restaurant_id == resolved_id)
         .order_by(Review.review_date.desc())
         .offset(skip)
         .limit(limit)
@@ -193,7 +233,8 @@ async def trigger_categorization(
     Example:
         curl -X POST http://localhost:8000/api/v1/reviews/{restaurant_id}/categorize
     """
+    resolved_id = resolve_reviews_restaurant_id(str(restaurant_id))
     result = await review_categorization.categorize_reviews_batch(
-        restaurant_id, session, batch_size=25
+        resolved_id, session, batch_size=25
     )
     return CategorizationResponse(**result)
