@@ -35,9 +35,9 @@ app = FastAPI(title="SAM3 Classification Server")
 
 # Detection thresholds
 PERSON_THRESHOLD = 0.5
-PLATE_THRESHOLD = 0.4
-PERSON_AREA_THRESHOLD = 0.15
-PLATE_AREA_THRESHOLD = 0.005
+PLATE_THRESHOLD = 0.5
+PERSON_AREA_THRESHOLD = 0.10  # Person must cover >10% of bbox to be "occupied"
+PLATE_AREA_THRESHOLD = 0.005  # Plate must cover >0.5% of bbox to be "dirty"
 
 # Visualization colors (BGR)
 STATE_COLORS = {

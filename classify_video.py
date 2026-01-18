@@ -20,7 +20,7 @@ Usage:
 Output:
     - Annotated visualization video with bounding boxes and states
     - JSON file with all classification results
-
+ python live_classifier.py --app "QuickTime Player" --crop-json /Users/bentang/Documents/Code/demovids/3_Mimosas/annotations.json --interval 1
 python classify_videos.py --crop-json "./demovids/3_1_Mimosas/annotations.json" --video "./demovids/3_1_Mimosas/raw1.mp4" --output "./demovids/3_1_Mimosas/demo1.mp4" --output-json "./demovids//3_1_Mimosas/results.json1"
 """
 from __future__ import annotations
