@@ -160,6 +160,7 @@ from app.api import (
     visits_router,
     routing_router,
     reviews_router,
+    chatbot_router,
     waiter_dashboard_router,
     scheduling_router,
     analytics_router,
@@ -177,6 +178,7 @@ app.include_router(waitlist_router)
 app.include_router(visits_router)
 app.include_router(routing_router)
 app.include_router(reviews_router)
+app.include_router(chatbot_router)
 app.include_router(waiter_dashboard_router)
 app.include_router(scheduling_router)
 app.include_router(analytics_router)
