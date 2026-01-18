@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import json
 from functools import lru_cache
-from typing import List
+from typing import Dict, List
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -51,6 +52,9 @@ class Settings(BaseSettings):
     tier_lookback_days: int = 30
     tier_recalc_day: int = 0  # 0=Monday, 6=Sunday
 
+    # Reviews: map alias restaurant IDs to a canonical reviews restaurant ID
+    reviews_restaurant_aliases: str = "{}"
+
     @property
     def cors_origins_list(self) -> List[str]:
         """Parse CORS origins from comma-separated string."""
@@ -63,6 +67,17 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"
+
+    @property
+    def reviews_restaurant_alias_map(self) -> Dict[str, str]:
+        """Parse reviews alias mapping from JSON string."""
+        try:
+            parsed = json.loads(self.reviews_restaurant_aliases or "{}")
+        except json.JSONDecodeError:
+            return {}
+        if not isinstance(parsed, dict):
+            return {}
+        return {str(k): str(v) for k, v in parsed.items()}
 
     # Chatbot (via OpenRouter)
     openrouter_api_key: str = ""

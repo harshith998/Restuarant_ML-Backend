@@ -93,6 +93,50 @@ const summary = await fetch(`/api/v1/reviews/${restaurantId}/summary`);
 
 ---
 
+## Reviews Restaurant Aliasing (Two IDs, One Reviews Dataset)
+
+If your frontend can switch between two restaurant IDs but you want **both**
+IDs to show the same reviews, set an alias mapping for reviews only.
+
+### 1. Find the two restaurant IDs
+
+```bash
+curl http://localhost:8000/api/v1/restaurants
+```
+
+Pick a canonical reviews ID (the one that already has reviews) and the alias
+ID (the one returning empty).
+
+### 2. Set the alias mapping
+
+Set `REVIEWS_RESTAURANT_ALIASES` as JSON where the **key** is the alias ID and
+the **value** is the canonical reviews ID:
+
+```bash
+export REVIEWS_RESTAURANT_ALIASES='{"alias_uuid":"canonical_uuid"}'
+```
+
+Or put the same line in your `.env` file.
+
+### 3. Restart the backend
+
+The mapping is read on startup, so restart the API after setting it.
+
+### 4. Verify from the frontend
+
+Use both restaurant IDs against the reviews endpoints:
+
+```
+GET /api/v1/reviews/{restaurant_id}/stats
+GET /api/v1/reviews/{restaurant_id}/summary
+GET /api/v1/reviews/{restaurant_id}/reviews?skip=0&limit=50
+```
+
+Both IDs should now return identical reviews data. This aliasing is **reviews
+only**; all other API endpoints still use each restaurant ID separately.
+
+---
+
 ## TypeScript Interfaces
 
 ### Core Data Types
