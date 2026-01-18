@@ -1,0 +1,55 @@
+\section{Operational Intelligence Suite}
+
+The platform provides five interconnected intelligence modules that transform raw operational data into actionable insights.
+
+\subsection{Review Intelligence}
+
+Multi-platform scraping (Yelp, Google) with anti-bot detection feeds reviews into ByteDance Seed 1.6 for sentiment analysis. The LLM extracts \textbf{5-category opinions} (food, service, atmosphere, value, cleanliness) and flags reviews requiring manager attention. Batch processing (25 reviews/batch) enables efficient categorization at scale.
+
+\subsection{Menu Intelligence}
+
+Items are ranked by a composite score combining demand and profitability:
+\begin{equation}
+\text{score} = (\text{orders/day})_{\text{norm}} \times 0.5 + \frac{\text{price} - \text{cost}}{\text{price}} \times 0.5
+\end{equation}
+
+The system generates \textbf{pricing recommendations} via a demand-margin matrix (high demand + low margin $\rightarrow$ +10-15\% price) and flags underperformers (score $<25$) for ``86'' removal with auto-generated reasoning.
+
+\subsection{Server Intelligence}
+
+Waiter performance uses Z-score normalization across three weighted metrics:
+\begin{equation}
+\text{performance} = 0.3 \cdot z_{\text{turn\_time}}^{-1} + 0.4 \cdot z_{\text{tip\_pct}} + 0.3 \cdot z_{\text{covers}}
+\end{equation}
+
+Percentile-based tier assignment (strong $\geq$ p75, standard p25--p75, developing $<$ p25) drives routing priority. LLM generates personalized insights: strengths, areas to watch, and improvement suggestions.
+
+\subsection{Scheduling Intelligence}
+
+\textbf{Demand forecasting} applies exponential decay ($0.85^{\text{weeks\_ago}}$) to historical data with linear trend detection. The score-and-rank algorithm optimizes assignments:
+\begin{equation}
+\text{score} = 0.5 \cdot \text{constraints} + 0.3 \cdot (\text{fairness\_impact} + 50) + 0.2 \cdot \text{preferences}
+\end{equation}
+
+Hard constraints (availability, max hours, no overlaps) exclude candidates; soft constraints (shift preferences, avoid clopening) are scored. \textbf{Gini coefficient} targets $<0.25$ for equitable hours distribution. Each assignment includes LLM-generated reasoning.
+
+\subsection{Analytics Engine}
+
+Pre-computed metrics power real-time dashboards:
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Metric} & \textbf{Granularity} & \textbf{Application} \\
+\midrule
+Table Turn Time & Per-visit, waiter, restaurant & Efficiency benchmarking \\
+Wait Time & Hourly/daily/weekly & Capacity planning \\
+Peak Hours & Day-of-week patterns & Staffing optimization \\
+Revenue Trends & Monthly rollups & Financial forecasting \\
+Forecast Accuracy & MAPE over 8--12 weeks & Model validation \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+All analytics endpoints support both aggregate views and drill-down to individual staff, shifts, or time periods.
