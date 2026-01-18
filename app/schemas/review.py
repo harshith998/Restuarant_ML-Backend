@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Optional
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -25,9 +26,9 @@ class ReviewRead(BaseModel):
     rating: int
     text: str
     review_date: datetime
-    sentiment_score: float | None
-    category_opinions: dict | None
-    overall_summary: str | None
+    sentiment_score: Optional[float]
+    category_opinions: Optional[dict]
+    overall_summary: Optional[str]
     needs_attention: bool
     status: str
     created_at: datetime
