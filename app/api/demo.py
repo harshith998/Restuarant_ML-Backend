@@ -127,10 +127,46 @@ async def demo_summary(
     session: AsyncSession = Depends(get_session),
 ) -> DemoSummaryResponse:
     """Return ranked waiters and available tables for demo host UI."""
+    seed_service = SeedService(session)
     try:
         resolved_restaurant_id = await resolve_restaurant_id(restaurant_id, session)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        if "No restaurants found" in str(exc):
+            await seed_service.ensure_default_data()
+            resolved_restaurant_id = await resolve_restaurant_id(restaurant_id, session)
+        else:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    routing_service = RoutingService(session)
+    restaurant = await routing_service._get_restaurant(resolved_restaurant_id)
+    if not restaurant:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+    config = routing_service._get_routing_config(restaurant)
+
+    waiter_service = WaiterService(session)
+    active_waiters = await waiter_service.get_active_waiters(resolved_restaurant_id)
+    if not active_waiters:
+        await seed_service.seed_active_shift_snapshot(
+            restaurant_id=resolved_restaurant_id
+        )
+
+    available_waiters = await waiter_service.get_available_waiters(
+        restaurant_id=resolved_restaurant_id,
+        section_ids=None,
+        max_tables=config.max_tables_per_waiter,
+    )
+
+    shift_ids = {}
+    for waiter in available_waiters:
+        shift = await waiter_service.get_active_shift_for_waiter(waiter.id)
+        if shift:
+            shift_ids[waiter.id] = shift.id
+
+    ranked_waiters = await waiter_service.score_and_rank_waiters(
+        waiters=available_waiters,
+        config=config,
+        shift_ids=shift_ids,
+    )
 
     stmt = (
         select(Table)
@@ -156,31 +192,6 @@ async def demo_summary(
         )
         for table in tables
     ]
-
-    routing_service = RoutingService(session)
-    restaurant = await routing_service._get_restaurant(resolved_restaurant_id)
-    if not restaurant:
-        raise HTTPException(status_code=404, detail="Restaurant not found")
-    config = routing_service._get_routing_config(restaurant)
-
-    waiter_service = WaiterService(session)
-    available_waiters = await waiter_service.get_available_waiters(
-        restaurant_id=resolved_restaurant_id,
-        section_ids=None,
-        max_tables=config.max_tables_per_waiter,
-    )
-
-    shift_ids = {}
-    for waiter in available_waiters:
-        shift = await waiter_service.get_active_shift_for_waiter(waiter.id)
-        if shift:
-            shift_ids[waiter.id] = shift.id
-
-    ranked_waiters = await waiter_service.score_and_rank_waiters(
-        waiters=available_waiters,
-        config=config,
-        shift_ids=shift_ids,
-    )
 
     waiter_payload = [
         DemoSummaryWaiter(
