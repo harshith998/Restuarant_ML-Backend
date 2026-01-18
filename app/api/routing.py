@@ -13,13 +13,14 @@ from app.database import get_session
 from app.schemas.routing import RouteRequest, RouteResponse
 from app.schemas.visit import VisitRead
 from app.services.routing_service import RoutingService
+from app.services.restaurant_resolver import resolve_restaurant_id
 
 router = APIRouter(prefix="/api/v1", tags=["routing"])
 
 
 @router.post("/restaurants/{restaurant_id}/routing/recommend", response_model=RouteResponse)
 async def recommend_seating(
-    restaurant_id: UUID,
+    restaurant_id: str,
     request: RouteRequest,
     session: AsyncSession = Depends(get_session),
 ) -> RouteResponse:
@@ -36,10 +37,15 @@ async def recommend_seating(
     Returns:
         RouteResponse with recommended table and waiter
     """
+    try:
+        resolved_restaurant_id = await resolve_restaurant_id(restaurant_id, session)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
     service = RoutingService(session)
 
     result = await service.route_party(
-        restaurant_id=restaurant_id,
+        restaurant_id=resolved_restaurant_id,
         party_size=request.party_size,
         table_preference=request.table_preference,
         location_preference=request.location_preference,
@@ -51,7 +57,7 @@ async def recommend_seating(
 
 @router.post("/restaurants/{restaurant_id}/routing/seat", response_model=VisitRead)
 async def seat_party(
-    restaurant_id: UUID,
+    restaurant_id: str,
     table_id: UUID,
     waiter_id: UUID,
     party_size: int,
@@ -73,11 +79,16 @@ async def seat_party(
     Returns:
         The created Visit record
     """
+    try:
+        resolved_restaurant_id = await resolve_restaurant_id(restaurant_id, session)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
     service = RoutingService(session)
 
     try:
         visit = await service.seat_party(
-            restaurant_id=restaurant_id,
+            restaurant_id=resolved_restaurant_id,
             table_id=table_id,
             waiter_id=waiter_id,
             party_size=party_size,
@@ -90,7 +101,7 @@ async def seat_party(
 
 @router.post("/restaurants/{restaurant_id}/routing/mode")
 async def switch_routing_mode(
-    restaurant_id: UUID,
+    restaurant_id: str,
     mode: str,
     session: AsyncSession = Depends(get_session),
 ) -> dict:
@@ -110,10 +121,15 @@ async def switch_routing_mode(
             detail="Mode must be 'section' or 'rotation'"
         )
 
+    try:
+        resolved_restaurant_id = await resolve_restaurant_id(restaurant_id, session)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
     service = RoutingService(session)
 
     try:
-        await service.switch_mode(restaurant_id, mode)
+        await service.switch_mode(resolved_restaurant_id, mode)
         return {"status": "ok", "mode": mode}
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))

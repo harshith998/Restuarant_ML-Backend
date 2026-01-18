@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, time
 from decimal import Decimal
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from sqlalchemy import select, func, text
@@ -1831,6 +1831,19 @@ class SeedService:
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def _get_restaurant_sections(
+        self,
+        restaurant_id: UUID,
+    ) -> List[Section]:
+        """Get all active sections for a restaurant."""
+        stmt = (
+            select(Section)
+            .where(Section.restaurant_id == restaurant_id)
+            .where(Section.is_active == True)  # noqa: E712
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def _get_restaurant_tables(
         self,
         restaurant_id: UUID,
@@ -1967,6 +1980,190 @@ class SeedService:
                 result["message"] += f" (added {result['visits_created']} sample visits)"
 
         return result
+
+    async def seed_active_shift_snapshot(
+        self,
+        restaurant_id: UUID,
+        waiter_specs: Optional[List[Dict[str, Any]]] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Seed active shifts/visits so host UI has immediate data.
+
+        Creates up to 4 active waiters with shifts, assigns sections,
+        and creates current visits to reflect "current_tables".
+        """
+        now = datetime.utcnow()
+
+        sections = await self._get_restaurant_sections(restaurant_id)
+        if not sections:
+            sections = await self._create_default_sections(restaurant_id)
+            for section in sections:
+                await self._create_default_tables(
+                    restaurant_id=restaurant_id,
+                    section_id=section.id,
+                    section_name=section.name,
+                )
+
+        tables = await self._get_restaurant_tables(restaurant_id)
+        waiters = await self._get_restaurant_waiters(restaurant_id)
+        if not waiters:
+            waiters = await self._create_default_waiters(restaurant_id)
+
+        section_by_name = {section.name.lower(): section for section in sections}
+
+        def _resolve_section_id(index: int, spec: Optional[Dict[str, Any]]) -> UUID:
+            if spec and spec.get("section_name"):
+                section = section_by_name.get(spec["section_name"].lower())
+                if section:
+                    return section.id
+            return sections[index % len(sections)].id
+
+        selected_waiters: List[Waiter] = []
+        resolved_specs: List[Dict[str, Any]] = []
+
+        if waiter_specs:
+            for spec in waiter_specs:
+                name = spec.get("name")
+                if not name:
+                    continue
+                existing = next((w for w in waiters if w.name == name), None)
+                if not existing:
+                    existing = Waiter(
+                        restaurant_id=restaurant_id,
+                        name=name,
+                        email=None,
+                        tier=spec.get("tier", "standard"),
+                        composite_score=Decimal(
+                            str(spec.get("composite_score", 50.0))
+                        ),
+                    )
+                    self.session.add(existing)
+                    waiters.append(existing)
+                else:
+                    if spec.get("tier"):
+                        existing.tier = spec["tier"]
+                    if spec.get("composite_score") is not None:
+                        existing.composite_score = Decimal(
+                            str(spec.get("composite_score"))
+                        )
+                selected_waiters.append(existing)
+                resolved_specs.append(spec)
+        else:
+            # Use existing waiters or fill from defaults to reach 4
+            selected_waiters = waiters[:4]
+            if len(selected_waiters) < 4:
+                existing_names = {w.name for w in waiters}
+                for default in DEFAULT_WAITERS:
+                    if default["name"] in existing_names:
+                        continue
+                    waiter = Waiter(
+                        restaurant_id=restaurant_id,
+                        name=default["name"],
+                        email=default["email"],
+                        tier=default["tier"],
+                        composite_score=Decimal(str(default["composite_score"])),
+                        total_shifts=default.get("total_shifts", 0),
+                        total_covers=default.get("total_covers", 0),
+                        total_tips=Decimal(str(default.get("total_tips", 0))),
+                        total_tables_served=default.get("total_tables_served", 0),
+                        total_sales=Decimal(str(default.get("total_sales", 0))),
+                    )
+                    self.session.add(waiter)
+                    waiters.append(waiter)
+                    selected_waiters.append(waiter)
+                    if len(selected_waiters) >= 4:
+                        break
+            resolved_specs = [{} for _ in selected_waiters]
+
+        # End existing shifts + clear active visits for selected waiters
+        for waiter in selected_waiters:
+            stmt = (
+                select(Shift)
+                .where(Shift.waiter_id == waiter.id)
+                .where(Shift.status.in_(["active", "on_break"]))
+            )
+            result = await self.session.execute(stmt)
+            for shift in result.scalars().all():
+                shift.status = "ended"
+                shift.clock_out = now
+
+            stmt = (
+                select(Visit)
+                .where(Visit.waiter_id == waiter.id)
+                .where(Visit.cleared_at.is_(None))
+            )
+            result = await self.session.execute(stmt)
+            for visit in result.scalars().all():
+                visit.cleared_at = now
+                if visit.table:
+                    visit.table.state = "clean"
+                    visit.table.current_visit_id = None
+
+        await self.session.flush()
+
+        available_by_section: Dict[UUID, List[Table]] = {}
+        for table in tables:
+            if table.state != "clean" or not table.is_active:
+                continue
+            if table.section_id not in available_by_section:
+                available_by_section[table.section_id] = []
+            available_by_section[table.section_id].append(table)
+
+        seeded: List[Dict[str, Any]] = []
+
+        for idx, waiter in enumerate(selected_waiters):
+            spec = resolved_specs[idx] if idx < len(resolved_specs) else {}
+            current_tables = int(spec.get("current_tables", 0))
+            tables_served = int(spec.get("tables_served", current_tables))
+            total_tips = float(spec.get("total_tips", current_tables * 25))
+            total_covers = int(spec.get("total_covers", current_tables * 2))
+
+            section_id = _resolve_section_id(idx, spec)
+
+            shift = Shift(
+                restaurant_id=restaurant_id,
+                waiter_id=waiter.id,
+                section_id=section_id,
+                clock_in=now - timedelta(hours=1),
+                status="active",
+                tables_served=tables_served,
+                total_covers=total_covers,
+                total_tips=Decimal(str(total_tips)),
+            )
+            self.session.add(shift)
+            await self.session.flush()
+
+            for _ in range(current_tables):
+                section_tables = available_by_section.get(section_id, [])
+                if not section_tables:
+                    break
+                table = section_tables.pop(0)
+                visit = Visit(
+                    restaurant_id=restaurant_id,
+                    table_id=table.id,
+                    waiter_id=waiter.id,
+                    shift_id=shift.id,
+                    party_size=2,
+                    seated_at=now - timedelta(minutes=20),
+                )
+                self.session.add(visit)
+                await self.session.flush()
+
+                table.state = "occupied"
+                table.current_visit_id = visit.id
+                table.state_updated_at = now
+
+            seeded.append(
+                {
+                    "waiter_id": waiter.id,
+                    "shift_id": shift.id,
+                    "name": waiter.name,
+                    "current_tables": current_tables,
+                }
+            )
+
+        await self.session.commit()
+        return seeded
 
     async def _create_default_restaurant_with_all(self) -> Restaurant:
         """Create default restaurant with all related data."""
