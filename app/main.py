@@ -164,6 +164,8 @@ from app.api import (
     scheduling_router,
     analytics_router,
     video_router,
+    demo_router,
+    demo_summary_router,
 )
 from app.api.menu_analytics import router as menu_analytics_router
 from app.api.inventory import router as inventory_router
@@ -184,11 +186,17 @@ app.include_router(menu_analytics_router)
 app.include_router(inventory_router)
 app.include_router(kitchen_routing_router)
 app.include_router(video_router)
+app.include_router(demo_router)
+app.include_router(demo_summary_router)
 
 # Mount static files for video frames
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
+from app.websocket.demo import register_demo_websocket
 
 uploads_dir = Path("uploads")
 uploads_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory="uploads"), name="static")
+
+# Demo websocket endpoint
+register_demo_websocket(app)
