@@ -362,7 +362,7 @@ async def list_schedules(
 )
 async def create_schedule(
     restaurant_id: str = Path(..., description="Restaurant UUID or 'default'"),
-    data: ScheduleCreate = None,
+    data: ScheduleCreate = Body(...),
     session: AsyncSession = Depends(get_session),
 ) -> ScheduleRead:
     """Create a new schedule for a restaurant."""
@@ -454,13 +454,12 @@ async def update_schedule(
 
 @router.delete(
     "/schedules/{schedule_id}",
-    status_code=204,
     summary="Delete a schedule",
 )
 async def delete_schedule(
     schedule_id: UUID,
     session: AsyncSession = Depends(get_session),
-) -> None:
+) -> dict:
     """
     Delete a schedule and all its items.
 
@@ -487,6 +486,7 @@ async def delete_schedule(
 
     await session.delete(schedule)
     await session.commit()
+    return {"deleted": True, "schedule_id": str(schedule_id)}
 
 
 @router.post(
@@ -766,7 +766,7 @@ async def create_schedule_run(
     # Default week_start_date to next Monday when not provided
     if data is None or data.week_start_date is None:
         today = datetime.utcnow().date()
-        days_until_monday = (7 - today.weekday()) % 7
+        days_until_monday = (7 - today.weekday()) % 7 or 7
         week_start_date = today + timedelta(days=days_until_monday)
         data = ScheduleRunCreate(week_start_date=week_start_date)
 
@@ -910,7 +910,7 @@ async def list_staffing_requirements(
 )
 async def create_staffing_requirement(
     restaurant_id: str = Path(..., description="Restaurant UUID or 'default'"),
-    data: StaffingRequirementsCreate = None,
+    data: StaffingRequirementsCreate = Body(...),
     session: AsyncSession = Depends(get_session),
 ) -> StaffingRequirementsRead:
     """Create a new staffing requirement for a time slot."""
