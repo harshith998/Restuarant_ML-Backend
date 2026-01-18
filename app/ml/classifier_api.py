@@ -29,7 +29,7 @@ class ModelManager:
     """Manages ML model lifecycle."""
 
     def __init__(self) -> None:
-        self.classifier: TableClassifier | None = None
+        self.classifier: Optional[TableClassifier] = None
 
     def load(self, weights_path: str = None, device: str = None) -> None:
         """Load the classifier model."""

@@ -512,7 +512,8 @@ class TestScheduleReasoningGenerator:
             preferred_shift_types=["morning"],
         )
 
-    def test_generate_reasoning_includes_availability(
+    @pytest.mark.asyncio
+    async def test_generate_reasoning_includes_availability(
         self,
         generator: ScheduleReasoningGenerator,
         sample_staff: StaffContext,
@@ -526,12 +527,13 @@ class TestScheduleReasoningGenerator:
             role="server",
         )
 
-        reasoning = generator.generate_reasoning(sample_staff, assignment)
+        reasoning = await generator.generate_reasoning(sample_staff, assignment)
 
         assert len(reasoning.reasons) > 0
         assert any("Monday" in r for r in reasoning.reasons) or any("preferred" in r.lower() for r in reasoning.reasons)
 
-    def test_generate_reasoning_includes_preference_matches(
+    @pytest.mark.asyncio
+    async def test_generate_reasoning_includes_preference_matches(
         self,
         generator: ScheduleReasoningGenerator,
         sample_staff: StaffContext,
@@ -545,11 +547,12 @@ class TestScheduleReasoningGenerator:
             role="server",  # Preferred role
         )
 
-        reasoning = generator.generate_reasoning(sample_staff, assignment)
+        reasoning = await generator.generate_reasoning(sample_staff, assignment)
 
         assert len(reasoning.preference_matches) > 0
 
-    def test_generate_reasoning_summary_is_populated(
+    @pytest.mark.asyncio
+    async def test_generate_reasoning_summary_is_populated(
         self,
         generator: ScheduleReasoningGenerator,
         sample_staff: StaffContext,
@@ -563,12 +566,13 @@ class TestScheduleReasoningGenerator:
             role="server",
         )
 
-        reasoning = generator.generate_reasoning(sample_staff, assignment)
+        reasoning = await generator.generate_reasoning(sample_staff, assignment)
 
         assert len(reasoning.summary) > 0
         assert sample_staff.name in reasoning.summary
 
-    def test_generate_reasoning_confidence_score_is_valid(
+    @pytest.mark.asyncio
+    async def test_generate_reasoning_confidence_score_is_valid(
         self,
         generator: ScheduleReasoningGenerator,
         sample_staff: StaffContext,
@@ -582,11 +586,12 @@ class TestScheduleReasoningGenerator:
             role="server",
         )
 
-        reasoning = generator.generate_reasoning(sample_staff, assignment)
+        reasoning = await generator.generate_reasoning(sample_staff, assignment)
 
         assert 0.1 <= reasoning.confidence_score <= 0.95
 
-    def test_generate_reasoning_detects_clopening(
+    @pytest.mark.asyncio
+    async def test_generate_reasoning_detects_clopening(
         self,
         generator: ScheduleReasoningGenerator,
         sample_staff: StaffContext,
@@ -622,11 +627,12 @@ class TestScheduleReasoningGenerator:
             )
         )
 
-        reasoning = generator.generate_reasoning(sample_staff, assignment)
+        reasoning = await generator.generate_reasoning(sample_staff, assignment)
 
         # Should detect clopening since gap is only ~7 hours
         # Note: This depends on implementation detecting across days
         # If not detected, the test validates the feature needs implementation
+        assert reasoning is not None
 
 
 # =============================================================================

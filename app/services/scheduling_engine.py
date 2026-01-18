@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import logging
 from datetime import date, datetime, time, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID
@@ -29,9 +30,17 @@ from app.services.scheduling_constraints import (
     StaffingRequirement,
 )
 from app.services.fairness_calculator import FairnessCalculator, FairnessReport
+from app.services.llm_client import call_llm, LLMError
 
 
 ENGINE_VERSION = "1.0.0"
+
+SCHEDULE_SUMMARY_SYSTEM_PROMPT = """You are an AI scheduling assistant explaining scheduling decisions.
+
+Write a concise, conversational 3-4 sentence explanation for a restaurant manager.
+Focus on coverage, fairness, preferences, and trade-offs. Be specific and actionable."""
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -158,6 +167,7 @@ class SchedulingEngine:
             slots_filled = 0
             slots_required = 0
             preference_scores = []
+            gaps: List[str] = []
 
             for day_offset in range(7):
                 current_date = week_start + timedelta(days=day_offset)
@@ -213,11 +223,59 @@ class SchedulingEngine:
                         total_hours += self._calculate_hours(assignment)
                         preference_scores.append(candidate.constraint_score)
 
+                    if assigned_count < target_count:
+                        gap_count = target_count - assigned_count
+                        gaps.append(
+                            f"{current_date.strftime('%a')} {req.start_time}-{req.end_time} "
+                            f"{req.role} short {gap_count}"
+                        )
+
             # Calculate final fairness
             fairness_report = self.fairness.calculate_schedule_fairness(staff_list)
 
             # Calculate coverage
             coverage_pct = (slots_filled / slots_required * 100) if slots_required > 0 else 100.0
+
+            # Always attempt LLM summary generation (store None on failure)
+            summary_prompt = f"""
+You are an AI scheduling assistant explaining your scheduling decisions to a restaurant manager.
+
+Schedule created for week of {week_start}:
+- Created {items_created} shifts totaling {round(total_hours, 1)} hours
+- Achieved {round(coverage_pct, 1)}% coverage of staffing requirements
+- Fairness score (Gini coefficient): {fairness_report.gini_coefficient:.2f} (lower is more fair)
+- Preference matching: {round(sum(preference_scores) / len(preference_scores), 1) if preference_scores else 0}% of shifts matched staff preferences
+- {len(gaps)} coverage gaps remaining
+
+Staff context:
+- {len(staff_list)} total staff members
+- {len(requirements)} different time slot requirements
+- Mix of full-time and part-time availability
+
+Write a natural, conversational 3-4 sentence explanation of your scheduling strategy. Explain:
+- What you prioritized (fairness, coverage, preferences, peak periods)
+- Key decisions you made (who got which shifts and why)
+- Any trade-offs or compromises (why some gaps exist, which preferences couldn't be met)
+- Actionable suggestions (hire more staff, adjust availability, etc.)
+
+Respond with JSON: {{"summary": "<your explanation>"}}
+"""
+
+            try:
+                response = await call_llm(
+                    system_prompt=SCHEDULE_SUMMARY_SYSTEM_PROMPT,
+                    user_prompt=summary_prompt,
+                    temperature=0.5,
+                    max_tokens=500,
+                    response_format="json",
+                )
+                schedule.schedule_summary = response.get("summary")
+            except LLMError as e:
+                logger.error(f"LLM schedule summary failed: {e}")
+                schedule.schedule_summary = None
+            except Exception as e:
+                logger.error(f"LLM schedule summary failed unexpectedly: {e}")
+                schedule.schedule_summary = None
 
             # Update run with success
             schedule_run.run_status = "completed"
@@ -362,12 +420,26 @@ class SchedulingEngine:
         run_id: UUID,
     ) -> Schedule:
         """Create a new schedule for the week."""
+        # Always create a new version for the same week (allows repeated runs)
+        existing_stmt = (
+            select(Schedule)
+            .where(
+                Schedule.restaurant_id == restaurant_id,
+                Schedule.week_start_date == week_start,
+            )
+            .order_by(Schedule.version.desc())
+            .limit(1)
+        )
+        existing_result = await self.session.execute(existing_stmt)
+        latest_schedule = existing_result.scalar_one_or_none()
+        next_version = (latest_schedule.version + 1) if latest_schedule else 1
+
         schedule = Schedule(
             restaurant_id=restaurant_id,
             week_start_date=week_start,
             status="draft",
             generated_by="engine",
-            version=1,
+            version=next_version,
             schedule_run_id=run_id,
         )
         self.session.add(schedule)

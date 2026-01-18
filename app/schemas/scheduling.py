@@ -20,6 +20,7 @@ class StaffRole(str, Enum):
     HOST = "host"
     BUSSER = "busser"
     RUNNER = "runner"
+    CHEF = "chef"
 
 
 class AvailabilityType(str, Enum):
@@ -177,6 +178,11 @@ class ScheduleUpdate(BaseModel):
     status: Optional[ScheduleStatus] = None
 
 
+class ScheduleSummaryUpdate(BaseModel):
+    """Schema for updating schedule summary."""
+    schedule_summary: Optional[str] = None
+
+
 class ScheduleRead(ScheduleBase):
     """Schema for reading a schedule."""
     model_config = ConfigDict(from_attributes=True)
@@ -185,14 +191,20 @@ class ScheduleRead(ScheduleBase):
     restaurant_id: UUID
     version: int
     schedule_run_id: Optional[UUID] = None
+    schedule_summary: Optional[str] = None
     published_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 
 
 class ScheduleWithItemsRead(ScheduleRead):
-    """Schema for reading a schedule with its items."""
+    """Schema for reading a schedule with its items (without reasoning)."""
     items: List["ScheduleItemRead"] = Field(default_factory=list)
+
+
+class ScheduleWithItemsAndReasoningRead(ScheduleRead):
+    """Schema for reading a schedule with items AND AI reasoning for each item."""
+    items: List["ScheduleItemWithReasoningRead"] = Field(default_factory=list)
 
 
 # =============================================================================
@@ -218,6 +230,7 @@ class ScheduleItemCreate(ScheduleItemBase):
 
 class ScheduleItemUpdate(BaseModel):
     """Schema for updating a schedule item."""
+    waiter_id: Optional[UUID] = None
     role: Optional[StaffRole] = None
     section_id: Optional[UUID] = None
     shift_date: Optional[date] = None
@@ -249,7 +262,7 @@ class ScheduleItemWithReasoningRead(ScheduleItemRead):
 
 class ScheduleRunCreate(BaseModel):
     """Schema for triggering a schedule run."""
-    week_start_date: date
+    week_start_date: Optional[date] = None
 
 
 class ScheduleRunRead(BaseModel):
@@ -267,6 +280,8 @@ class ScheduleRunRead(BaseModel):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     created_at: datetime
+    # The ID of the schedule created by this run (for fetching the actual schedule)
+    schedule_id: Optional[UUID] = None
 
 
 class ScheduleRunDetailRead(ScheduleRunRead):
@@ -389,5 +404,6 @@ class WeeklyAvailabilityTemplate(BaseModel):
 
 # Forward reference updates
 ScheduleWithItemsRead.model_rebuild()
+ScheduleWithItemsAndReasoningRead.model_rebuild()
 ScheduleItemWithReasoningRead.model_rebuild()
 ScheduleRunDetailRead.model_rebuild()

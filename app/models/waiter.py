@@ -27,7 +27,7 @@ class Waiter(Base):
     # Roles that require individual performance tracking (tips, covers, tier scoring)
     PERFORMANCE_TRACKED_ROLES = {"server", "bartender"}
     # Roles scheduled primarily by availability (team-based, no individual metrics)
-    AVAILABILITY_ONLY_ROLES = {"host", "busser", "runner"}
+    AVAILABILITY_ONLY_ROLES = {"host", "busser", "runner", "chef"}
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -42,7 +42,7 @@ class Waiter(Base):
     # Staff role - determines scheduling strategy and analytics applicability
     role: Mapped[str] = mapped_column(
         String(20), default="server"
-    )  # server, host, busser, runner, bartender
+    )  # server, host, busser, runner, bartender, chef
 
     # Performance tier (auto-calculated, only applies to PERFORMANCE_TRACKED_ROLES)
     tier: Mapped[str] = mapped_column(String(20), default="standard")  # strong, standard, developing

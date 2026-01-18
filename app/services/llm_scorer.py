@@ -11,8 +11,27 @@ from typing import Any, Dict, List, Optional
 from app.models.waiter import Waiter
 from app.services.metrics_aggregator import WaiterMetricsSnapshot
 from app.services.tier_calculator import ZScoreResult
+from app.services.llm_client import call_llm, LLMError
 
 logger = logging.getLogger(__name__)
+
+# System prompt for waiter scoring
+WAITER_SCORING_SYSTEM_PROMPT = """You are a restaurant analytics expert specializing in waiter performance evaluation.
+
+Your task is to analyze waiter metrics and provide:
+1. A performance score (0-100) based on the data provided
+2. Key strengths (3-5 points)
+3. Areas that need attention (1-3 points, or none if performing excellently)
+4. Actionable suggestions for improvement (1-2 recommendations)
+5. A brief summary (2-3 sentences)
+
+Scoring methodology context:
+- Turn time: Lower is better (faster table turnover)
+- Tip percentage: Higher is better (customer satisfaction indicator)
+- Covers per shift: Higher is better (efficiency indicator)
+- Z-scores show standard deviations from peer average (positive = above average)
+
+Always respond with valid JSON in the exact format specified."""
 
 
 @dataclass
@@ -250,25 +269,12 @@ class LLMScorer:
     """
     LLM-powered waiter scoring and insights generation.
 
-    Uses call_llm function to interact with OpenRouter API.
+    Uses call_llm from llm_client to interact with OpenRouter API.
     """
 
-    DEFAULT_MODEL = "bytedance-seed/seed-1.6"
-
-    def __init__(
-        self,
-        model: Optional[str] = None,
-        call_llm_func: Optional[callable] = None,
-    ):
-        """
-        Initialize LLM scorer.
-
-        Args:
-            model: Model identifier for OpenRouter
-            call_llm_func: The call_llm function to use (injected dependency)
-        """
-        self.model = model or self.DEFAULT_MODEL
-        self._call_llm = call_llm_func
+    def __init__(self):
+        """Initialize LLM scorer."""
+        pass
 
     async def score_waiter(
         self,
@@ -293,7 +299,7 @@ class LLMScorer:
         Returns:
             LLMScoringResult with score and insights
         """
-        prompt = self._build_scoring_prompt(
+        user_prompt = self._build_user_prompt(
             waiter=waiter,
             metrics=metrics,
             math_score=math_score,
@@ -304,36 +310,45 @@ class LLMScorer:
 
         # Call LLM
         try:
-            if self._call_llm is None:
-                # Return fallback if no LLM function provided
-                logger.warning("No call_llm function provided, using math score as fallback")
-                return LLMScoringResult(
-                    llm_score=math_score,
-                    strengths=self._generate_fallback_strengths(metrics, peer_stats),
-                    areas_to_watch=self._generate_fallback_areas(metrics, peer_stats),
-                    suggestions=["Continue current performance"],
-                    summary="Analysis based on mathematical scoring.",
-                    model_used="fallback",
-                )
-
-            response = await self._call_llm(
-                model=self.model,
-                prompt=prompt,
-                max_tokens=1000,
+            response = await call_llm(
+                system_prompt=WAITER_SCORING_SYSTEM_PROMPT,
+                user_prompt=user_prompt,
                 temperature=0.3,  # Lower for more consistent scoring
+                max_tokens=1000,
+                response_format="json",
             )
 
-            # Parse response
-            result = LLMResponseParser.parse_response(
-                response=response,
-                fallback_score=math_score,
+            # Response is already parsed as dict by call_llm
+            result = LLMScoringResult(
+                llm_score=float(response.get("llm_score", math_score)),
+                strengths=response.get("strengths", []),
+                areas_to_watch=response.get("areas_to_watch", []),
+                suggestions=response.get("suggestions", []),
+                summary=response.get("summary", ""),
+                raw_response=json.dumps(response),
+                model_used="openrouter",
             )
-            result.model_used = self.model
+
+            # Validate score range
+            if not 0 <= result.llm_score <= 100:
+                result.llm_score = math_score
+                result.parse_errors.append(f"Score out of range, using math score")
 
             return result
 
-        except Exception as e:
+        except LLMError as e:
             logger.error(f"LLM scoring failed: {e}")
+            return LLMScoringResult(
+                llm_score=math_score,
+                strengths=self._generate_fallback_strengths(metrics, peer_stats),
+                areas_to_watch=self._generate_fallback_areas(metrics, peer_stats),
+                suggestions=["Continue current performance"],
+                summary=f"LLM analysis unavailable: {str(e)}",
+                parse_errors=[str(e)],
+                model_used="fallback",
+            )
+        except Exception as e:
+            logger.error(f"LLM scoring failed unexpectedly: {e}")
             return LLMScoringResult(
                 llm_score=math_score,
                 strengths=self._generate_fallback_strengths(metrics, peer_stats),
@@ -341,10 +356,10 @@ class LLMScorer:
                 suggestions=[],
                 summary=f"LLM analysis unavailable: {str(e)}",
                 parse_errors=[str(e)],
-                model_used=self.model,
+                model_used="fallback",
             )
 
-    def _build_scoring_prompt(
+    def _build_user_prompt(
         self,
         waiter: Waiter,
         metrics: WaiterMetricsSnapshot,
@@ -353,7 +368,7 @@ class LLMScorer:
         peer_stats: Dict[str, float],
         monthly_trends: Optional[Dict[str, Dict]] = None,
     ) -> str:
-        """Build the scoring prompt for the LLM."""
+        """Build the user prompt with waiter data for LLM analysis."""
         # Calculate tenure
         tenure_years = 0.0
         if waiter.created_at:
@@ -372,21 +387,7 @@ class LLMScorer:
             if trend_lines:
                 trends_summary = "\n".join(trend_lines)
 
-        prompt = f"""You are a restaurant analytics expert. Analyze this waiter's performance and provide:
-1. A final score (0-100) considering the math score and additional context
-2. A list of strengths (3-5 bullet points)
-3. Areas to watch (1-3 concerns, or none if performing well)
-4. Actionable suggestions (1-2 recommendations)
-
-## Methodology Context
-The math score uses this PRD formula:
-- Turn time (30% weight) - lower is better, Z-normalized
-- Tip percentage (40% weight) - higher is better, Z-normalized
-- Covers per shift (30% weight) - higher is better, Z-normalized
-
-Z-scores indicate standard deviations from peer average:
-- Positive = above average
-- Negative = below average
+        prompt = f"""Analyze this waiter's performance data:
 
 ## Waiter Profile
 Name: {waiter.name}
@@ -410,16 +411,14 @@ Math Score: {math_score:.1f}/100
 ## Recent Monthly Trends
 {trends_summary}
 
-IMPORTANT: Your response MUST be valid JSON in this exact format:
+Respond with JSON in this exact format:
 {{
   "llm_score": <float between 0 and 100>,
   "strengths": ["strength 1", "strength 2", "strength 3"],
   "areas_to_watch": ["area 1"],
   "suggestions": ["suggestion 1"],
   "summary": "<2-3 sentence analysis>"
-}}
-
-Do not include any text outside the JSON object."""
+}}"""
 
         return prompt
 
