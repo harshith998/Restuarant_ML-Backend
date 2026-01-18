@@ -7,6 +7,7 @@ from app.api.waitlist import router as waitlist_router
 from app.api.visits import router as visits_router
 from app.api.routing import router as routing_router
 from app.api.reviews import router as reviews_router
+from app.api.chatbot import router as chatbot_router
 from app.api.waiter_dashboard import router as waiter_dashboard_router
 from app.api.scheduling import router as scheduling_router
 from app.api.analytics import router as analytics_router
@@ -24,6 +25,7 @@ __all__ = [
     "visits_router",
     "routing_router",
     "reviews_router",
+    "chatbot_router",
     "waiter_dashboard_router",
     "scheduling_router",
     "analytics_router",
