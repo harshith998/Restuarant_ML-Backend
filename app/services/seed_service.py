@@ -141,10 +141,24 @@ MIMOSAS_RESTAURANT_CONFIG = {
     },
 }
 
+def _build_demo_floor_tables() -> list[dict]:
+    tables: list[dict] = []
+    for table_number in range(1, 50):
+        tables.append(
+            {
+                "table_number": str(table_number),
+                "capacity": 4,
+                "table_type": "table",
+            }
+        )
+    return tables
+
+
 MIMOSAS_SECTIONS = [
     {"name": "Main Dining", "is_active": True},
     {"name": "Outdoor Patio", "is_active": True},
     {"name": "Bar", "is_active": True},
+    {"name": "Demo Floor", "is_active": True},
 ]
 
 MIMOSAS_TABLES = {
@@ -165,6 +179,7 @@ MIMOSAS_TABLES = {
         {"table_number": "B2", "capacity": 2, "table_type": "bar"},
         {"table_number": "B3", "capacity": 4, "table_type": "high_top"},
     ],
+    "Demo Floor": _build_demo_floor_tables(),
 }
 
 # ============================================================
@@ -1670,6 +1685,7 @@ class SeedService:
                     check_amount = Decimal(str(random.uniform(40, 150)))
                     tip_pct = random.uniform(0.15, 0.25)
                     tip = check_amount * Decimal(str(tip_pct))
+                    shift_start = shift_date.replace(hour=16, minute=0)
 
                     visit = Visit(
                         restaurant_id=restaurant_id,
@@ -1677,8 +1693,8 @@ class SeedService:
                         waiter_id=waiter.id,
                         shift_id=shift.id,
                         party_size=party_size,
-                        seated_at=shift_date.replace(hour=17 + v),
-                        cleared_at=shift_date.replace(hour=18 + v),
+                        seated_at=shift_start + timedelta(hours=1 + v),
+                        cleared_at=shift_start + timedelta(hours=2 + v),
                         subtotal=check_amount,
                         tax=check_amount * Decimal("0.08"),
                         total=check_amount * Decimal("1.08"),
@@ -2237,6 +2253,42 @@ class SeedService:
             result["restaurant_id"] = restaurant.id
             result["already_exists"] = True
             logger.info("Mimosas restaurant already exists")
+
+            sections = await self._get_restaurant_sections(restaurant.id)
+            section_map = {section.name: section for section in sections}
+
+            demo_section = section_map.get("Demo Floor")
+            if not demo_section:
+                demo_section = Section(
+                    restaurant_id=restaurant.id,
+                    name="Demo Floor",
+                    is_active=True,
+                )
+                self.session.add(demo_section)
+                await self.session.flush()
+                result["sections_created"] += 1
+
+            existing_tables = await self._get_restaurant_tables(restaurant.id)
+            existing_numbers = {table.table_number for table in existing_tables}
+            demo_tables = MIMOSAS_TABLES.get("Demo Floor", [])
+            for table_data in demo_tables:
+                table_number = table_data["table_number"]
+                if table_number in existing_numbers:
+                    continue
+                table = Table(
+                    restaurant_id=restaurant.id,
+                    section_id=demo_section.id,
+                    table_number=table_number,
+                    capacity=table_data["capacity"],
+                    table_type=table_data["table_type"],
+                    state="clean",
+                )
+                self.session.add(table)
+                result["tables_created"] += 1
+
+            if result["sections_created"] or result["tables_created"]:
+                await self.session.commit()
+
             return result
 
         logger.info("Creating Mimosas restaurant with full data...")

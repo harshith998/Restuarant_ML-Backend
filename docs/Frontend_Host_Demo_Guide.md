@@ -21,8 +21,8 @@ websocket stream and uses the existing routing endpoints for recommendations.
   "mapping_mode": "auto",
   "demos": [
     {
-      "camera_id": "cam-1",
-      "results_path": "_legacy_poc/demovids/3_Mimosas/results.json"
+      "camera_id": "cam-3",
+      "results_path": "/Users/huntercameronkuperman/Downloads/demovids/3_Mimosas/results.json"
     }
   ]
 }
@@ -46,14 +46,14 @@ active shifts, and current visits so the top-of-screen cards have data.
   "seed_shift_snapshot": {
     "enabled": true,
     "waiters": [
-      { "name": "Sarah", "section_name": "Main Floor", "tier": "strong", "composite_score": 82, "tables_served": 8, "current_tables": 3, "total_tips": 240, "total_covers": 18 },
-      { "name": "Tyler", "section_name": "Main Floor", "tier": "standard", "composite_score": 62, "tables_served": 6, "current_tables": 2, "total_tips": 180, "total_covers": 12 },
-      { "name": "Maria", "section_name": "Patio", "tier": "standard", "composite_score": 58, "tables_served": 6, "current_tables": 2, "total_tips": 165, "total_covers": 10 },
+      { "name": "Sarah", "section_name": "Main Dining", "tier": "strong", "composite_score": 82, "tables_served": 8, "current_tables": 3, "total_tips": 240, "total_covers": 18 },
+      { "name": "Tyler", "section_name": "Main Dining", "tier": "standard", "composite_score": 62, "tables_served": 6, "current_tables": 2, "total_tips": 180, "total_covers": 12 },
+      { "name": "Maria", "section_name": "Outdoor Patio", "tier": "standard", "composite_score": 58, "tables_served": 6, "current_tables": 2, "total_tips": 165, "total_covers": 10 },
       { "name": "James", "section_name": "Bar", "tier": "developing", "composite_score": 42, "tables_served": 2, "current_tables": 0, "total_tips": 40, "total_covers": 4 }
     ]
   },
   "demos": [
-    { "camera_id": "cam-1", "results_path": "_legacy_poc/demovids/3_Mimosas/results.json" }
+    { "camera_id": "cam-3", "results_path": "/Users/huntercameronkuperman/Downloads/demovids/3_Mimosas/results.json" }
   ]
 }
 ```
@@ -165,7 +165,7 @@ Example override:
 ```json
 {
   "camera_id": "cam-1",
-  "results_path": "_legacy_poc/demovids/3_Mimosas/results.json",
+  "results_path": "/Users/huntercameronkuperman/Downloads/demovids/3_Mimosas/results.json",
   "table_map": {
     "T0": "1",
     "T1": "2",
@@ -232,6 +232,18 @@ endpoint is required.
 2. Connect `ws://<host>/ws/demo` for `table.state` updates
 3. Poll `GET /api/v1/restaurants/{restaurant_id}/demo/summary` for top cards
 4. Use routing endpoint for recommendations
+5. For waiter profile cards, call `POST /api/v1/seed/demo` once and then
+   fetch `GET /api/v1/waiters/{waiter_id}/dashboard` and
+   `GET /api/v1/waiters/{waiter_id}/stats`
+
+## Frontend endpoint checklist
+- `POST /api/v1/demo/initiate` (optionally `seed_shift_snapshot`)
+- `GET /api/v1/demo/status`
+- `GET /api/v1/restaurants/{restaurant_id}/demo/summary?min_capacity=1`
+- `ws://<host>/ws/demo` for `table.state` events
+- `POST /api/v1/restaurants/{restaurant_id}/routing/recommend`
+- `POST /api/v1/seed/demo` then `GET /api/v1/waiters/{waiter_id}/dashboard`
+- `GET /api/v1/waiters/{waiter_id}/stats` (and `/trends` if needed)
 
 ## Multi-Camera Demos
 Provide multiple entries in `demos` to run replay simultaneously:
@@ -240,10 +252,103 @@ Provide multiple entries in `demos` to run replay simultaneously:
 {
   "restaurant_id": "uuid",
   "demos": [
-    { "camera_id": "cam-1", "results_path": "..." },
-    { "camera_id": "cam-2", "results_path": "..." }
+    { "camera_id": "cam-2", "results_path": "/Users/huntercameronkuperman/Downloads/demovids/2_Mimosas/results.json" },
+    { "camera_id": "cam-3", "results_path": "/Users/huntercameronkuperman/Downloads/demovids/3_Mimosas/results.json" },
+    { "camera_id": "cam-4", "results_path": "/Users/huntercameronkuperman/Downloads/demovids/4_Mimosas/results.json" },
+    { "camera_id": "cam-5", "results_path": "/Users/huntercameronkuperman/Downloads/demovids/5_Mimosas/results.json" },
+    { "camera_id": "cam-6", "results_path": "/Users/huntercameronkuperman/Downloads/demovids/6_Mimosas/results.json" },
+    { "camera_id": "cam-7", "results_path": "/Users/huntercameronkuperman/Downloads/demovids/7_Mimosas/results.json" },
+    { "camera_id": "cam-8", "results_path": "/Users/huntercameronkuperman/Downloads/demovids/8_Mimosas/results.json" },
+    { "camera_id": "cam-9", "results_path": "/Users/huntercameronkuperman/Downloads/demovids/9_Mimosas/results.json" },
+    { "camera_id": "cam-11", "results_path": "/Users/huntercameronkuperman/Downloads/demovids/11_Mimosas/results.json" }
   ]
 }
 ```
 
 Each camera will emit `table.state` events tagged with its `camera_id`.
+For multi-camera demos, provide `table_map` per camera to avoid table number
+collisions. Demo floor tables are numeric (`"1"` through `"49"`). Camera 2 has no
+annotated tables, so it can omit `table_map`.
+
+### Demo table mappings (per camera)
+Use the following `table_map` values to align JSON tables to seeded demo tables:
+
+```json
+{
+  "restaurant_id": "uuid",
+  "demos": [
+    {
+      "camera_id": "cam-3",
+      "results_path": "/Users/huntercameronkuperman/Downloads/demovids/3_Mimosas/results.json",
+      "table_map": {
+        "T5": "1",
+        "T0": "2",
+        "T2": "3",
+        "T6": "8",
+        "T1": "12",
+        "T10": "10",
+        "T9": "14"
+      }
+    },
+    {
+      "camera_id": "cam-4",
+      "results_path": "/Users/huntercameronkuperman/Downloads/demovids/4_Mimosas/results.json",
+      "table_map": {
+        "T6": "23",
+        "T4": "21",
+        "T1": "24",
+        "T5": "20",
+        "T0": "22",
+        "T2": "15",
+        "T3": "11",
+        "T8": "14",
+        "T7": "10",
+        "T9": "9"
+      }
+    },
+    {
+      "camera_id": "cam-5",
+      "results_path": "/Users/huntercameronkuperman/Downloads/demovids/5_Mimosas/results.json",
+      "table_map": {
+        "T1": "27",
+        "T0": "25",
+        "T2": "28",
+        "T3": "26"
+      }
+    },
+    {
+      "camera_id": "cam-6",
+      "results_path": "/Users/huntercameronkuperman/Downloads/demovids/6_Mimosas/results.json",
+      "table_map": {
+        "T3": "34",
+        "T9": "35",
+        "T7": "36",
+        "T0": "38",
+        "T6": "39",
+        "T2": "40",
+        "T5": "41",
+        "T8": "37"
+      }
+    },
+    {
+      "camera_id": "cam-7",
+      "results_path": "/Users/huntercameronkuperman/Downloads/demovids/7_Mimosas/results.json",
+      "table_map": {
+        "T2": "43",
+        "T0": "44",
+        "T4": "46",
+        "T5": "47",
+        "T3": "48",
+        "T1": "49"
+      }
+    },
+    {
+      "camera_id": "cam-8",
+      "results_path": "/Users/huntercameronkuperman/Downloads/demovids/8_Mimosas/results.json",
+      "table_map": {
+        "T0": "49"
+      }
+    }
+  ]
+}
+```
